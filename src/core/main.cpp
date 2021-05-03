@@ -38,7 +38,31 @@ int main(int argc, char *argv[]) {
     return 1;
 
   // execute IR passes
+  FunctionPassManager FPM;
+  ModulePassManager MPM;
+
+  LoopAnalysisManager LAM;
+  FunctionAnalysisManager FAM;
+  CGSCCAnalysisManager CGAM;
   ModuleAnalysisManager MAM;
+
+  PassBuilder PB;
+
+  // register all the basic analyses with the managers.
+  PB.registerModuleAnalyses(MAM);
+  PB.registerCGSCCAnalyses(CGAM);
+  PB.registerFunctionAnalyses(FAM);
+  PB.registerLoopAnalyses(LAM);
+  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+  // add existing passes
+  //FPM.addPass(InstCombinePass());
+  //FPM.addPass(GVN());
+
+  // from FPM to MPM
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+  MPM.run(*M, MAM);
+
   UnfoldVectorInstPass().run(*M, MAM);
   LivenessAnalysis().run(*M, MAM);
   SpillCostAnalysis().run(*M, MAM);
@@ -47,7 +71,7 @@ int main(int argc, char *argv[]) {
   GEPUnpackPass().run(*M, MAM);
   RegisterSpillPass().run(*M, MAM);
   // use this for debugging
-  //outs() << *M;
+  outs() << *M;
 
   // execute backend to emit assembly
   Backend B(optOutput, optPrintProgress);
