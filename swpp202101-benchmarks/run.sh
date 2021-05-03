@@ -11,7 +11,7 @@ for pathname in *; do
         echo $pathname
         ./c-to-ll.sh "$pathname/src/$pathname.c" $1
         cd "$pathname/src"
-        sf-compiler "$pathname.ll" "$pathname.s"
+        sf-compiler "$pathname.ll" "$pathname.s" > "$pathname.opt.ll"
         cd "../test"
         for inputname in input*.txt; do
             echo "    $inputname"
