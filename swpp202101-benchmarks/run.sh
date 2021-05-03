@@ -21,6 +21,7 @@ for pathname in *; do
             num=$(echo $inputname | cut -c6-6)
             diff output.txt "output$num.txt" >> "$inputname.log"
         done
+        rm output.txt
         cd ../../
     fi
 done
