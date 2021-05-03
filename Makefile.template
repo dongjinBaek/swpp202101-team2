@@ -2,19 +2,21 @@
 
 SRC_CORE=$(wildcard src/core/*.cpp)
 SRC_BACKEND=$(wildcard src/backend/*.cpp)
+SRC_TEAM2_PASS=$(wildcard src/team2_pass/*.cpp)
 
 OBJ_CORE=$(SRC_CORE:src/core/%.cpp=obj/core/%.o)
 OBJ_BACKEND=$(SRC_BACKEND:src/backend/%.cpp=obj/backend/%.o)
+OBJ_TEAM2_PASS=$(SRC_TEAM2_PASS:src/team2_pass/%.cpp=obj/team2_pass/%.o)
 
-_dummy := $(shell mkdir -p obj obj/core obj/backend bin)
+_dummy := $(shell mkdir -p obj obj/core obj/backend obj/team2_pass bin)
 
 all: bin/sf-compiler
 
 test: all
 	@echo "(make test) IMPLEMENT THIS!"
 
-bin/sf-compiler: $(OBJ_CORE) $(OBJ_BACKEND)
-	@$(CXX) $(LDFLAGS) -o bin/sf-compiler $(OBJ_CORE) $(OBJ_BACKEND)
+bin/sf-compiler: $(OBJ_CORE) $(OBJ_BACKEND) $(OBJ_TEAM2_PASS)
+	@$(CXX) $(LDFLAGS) -o bin/sf-compiler $(OBJ_CORE) $(OBJ_BACKEND) $(OBJ_TEAM2_PASS)
 
 obj/core/%.o: src/core/%.cpp 
 	@echo "compiling src/core/$<..."
@@ -22,6 +24,10 @@ obj/core/%.o: src/core/%.cpp
 
 obj/backend/%.o: src/backend/%.cpp $(filter-out src/backend/%.h, $(SRC_BACKEND))
 	@echo "compiling src/backend/$<..."
+	@$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+obj/team2_pass/%.o: src/team2_pass/%.cpp $(filter-out src/team2_pass/%.h, $(SRC_TEAM2_PASS))
+	@echo "compiling src/team2_pass/$<..."
 	@$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 clean:
