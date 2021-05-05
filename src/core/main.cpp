@@ -5,6 +5,8 @@
 #include "../backend/RegisterSpill.h"
 #include "../backend/UnfoldVectorInst.h"
 
+#include "../team2_pass/ArithmeticPass.h"
+
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/raw_os_ostream.h"
@@ -70,6 +72,9 @@ int main(int argc, char *argv[]) {
   ConstExprRemovePass().run(*M, MAM);
   GEPUnpackPass().run(*M, MAM);
   RegisterSpillPass().run(*M, MAM);
+
+  ArithmeticPass().run(*M, MAM);
+
   // use this for debugging
   outs() << *M;
 
