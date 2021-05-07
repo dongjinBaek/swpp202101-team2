@@ -22,10 +22,11 @@ using namespace std;
 namespace backend {
 class ArithmeticPass : public PassInfoMixin<ArithmeticPass> {
 public:
-    PreservedAnalyses run(Module &, ModuleAnalysisManager &);
+    PreservedAnalyses run(Function &, FunctionAnalysisManager &);
 
 private:
-
+    void propIntEq(Function &, FunctionAnalysisManager &);
+    void changeUseIfEdgeDominates(Value *ChangeFrom, Value *ChangeTo, DominatorTree &DT, BasicBlockEdge &BBE);
 };
 }
 
