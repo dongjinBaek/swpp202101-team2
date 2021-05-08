@@ -9,6 +9,10 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/IR/PassManager.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Scalar/SimplifyCFG.h"
+
+#include "../team2_pass/Malloc2DynAlloca.h"
 
 #include <string>
 
@@ -56,10 +60,12 @@ int main(int argc, char *argv[]) {
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
   // add existing passes
+  //FPM.addPass(SimplifyCFGPass());
   //FPM.addPass(InstCombinePass());
   //FPM.addPass(GVN());
 
   // from FPM to MPM
+  MPM.addPass(Malloc2DynAllocaPass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   MPM.run(*M, MAM);
 

@@ -66,6 +66,7 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
         if(BB.getParent()->getName() == "main" && BB.getModule()->getGlobalList().size()!=0) {
             *fout << "  ; Init global variables\n";
             for(auto& gv : BB.getModule()->globals()) {
+                if (gv.getName().contains('$')) continue;
                 //temporarily stores the GV pointer.
                 unsigned size = (getAccessSize(gv.getValueType()) + 7) / 8 * 8;
                 *fout << emitInst({"r1 = malloc", to_string(size)});
@@ -94,6 +95,7 @@ void AssemblyEmitter::visitAllocaInst(AllocaInst& I) {
 //Memory Access insts.
 void AssemblyEmitter::visitLoadInst(LoadInst& I) {
     Value* ptr = I.getPointerOperand();
+    if (ptr->getName().contains('$')) return;
     //bytes to load
     string size = to_string(getAccessSize(dyn_cast<PointerType>(ptr->getType())->getElementType()));
     Symbol* symbol = SM->get(ptr);
@@ -218,6 +220,21 @@ void AssemblyEmitter::visitCallInst(CallInst& I) {
     if(Fname == "malloc") {
         assert(args.size()==1 && "argument of malloc() should be 1");
         *fout << emitInst({name(&I), "= malloc", name(I.getArgOperand(0))});
+    }
+    else if (Fname == "$dyn_alloca") {
+        string name0 = name(I.getArgOperand(0)), name1 = name(I.getArgOperand(1));
+        static unsigned int num = 0;
+        string str = to_string(num++);
+        *fout << emitInst({name1, "= icmp ult sp", name0, "64"});
+        *fout << emitInst({"br", name1, ".__sp.then" + str, ".__sp.else" + str});
+        *fout << ".__sp.then" + str << ":\n";
+        *fout << emitInst({name(&I), "= malloc", name0});
+        *fout << emitInst({"br .__sp.next" + str});
+        *fout << ".__sp.else" + str << ":\n";
+        *fout << emitInst({"sp = sub sp", name0, "64"});
+        *fout << emitInst({name(&I), "= mul sp 1 64"});
+        *fout << emitInst({"br .__sp.next" + str});
+        *fout << ".__sp.next" + str << ":\n";
     }
     else if(Fname == "free") {
         assert(args.size()==1 && "argument of free() should be 1");
