@@ -101,6 +101,15 @@ vector<vector<bool>> RegisterGraph::LiveInterval(Module &M)
             }
         }
 
+        if (V->hasNUses(0) && isa<Instruction>(V)) {
+            // if it has no use
+            Instruction *I = dyn_cast<Instruction>(V);
+            Instruction *Nxt = I->getNextNode();
+            if (Nxt != NULL) {
+                live[Nxt][i] = true;
+            }
+        }
+
         if(isa<PHINode>(V)) {
             PHINode* phi = dyn_cast<PHINode>(V);
             //phinodes should be live from the beginning of the function.
@@ -123,17 +132,58 @@ vector<vector<bool>> RegisterGraph::LiveInterval(Module &M)
             }
 
             Instruction* term = BB.getTerminator();
-            //Vector for storing liveness after terminator, before successor
             vector<bool> PhiTerm = live[term];
+            
+            //Vector for storing liveness after terminator, before successor
+            map<unsigned,bool> Dead;
+
+            for(BasicBlock* succ : successors(&BB)) {
+                for(PHINode& phi : succ->phis()) {
+                    Value* incomeV = phi.getIncomingValueForBlock(&BB);
+                    unsigned fv = findValue(incomeV);
+                    if (fv != -1)
+                        Dead[fv] = true;
+                }
+            }
+
+            for(BasicBlock* succ : successors(&BB)) {
+                // int phinum = NumPhi[succ];
+                for(PHINode& phi : succ->phis()) {
+                    Value* incomeV = phi.getIncomingValueForBlock(&BB);
+                    unsigned fv = findValue(incomeV);
+
+                    if (fv != -1 && live[&phi][fv]) {
+                        Dead[fv] = false;
+                    }
+                }
+            }
+
+            for (auto &[fv, d] : Dead) {
+                if (d) PhiTerm[fv] = false;
+            }
+
+            Dead.clear();
+
+            // Condition for BranchInst or SwitchInst should be alive
+            BranchInst *br;
+            SwitchInst *swc;
+            Value *cond = NULL;
+
+            if ((br = dyn_cast<BranchInst>(term)) && br->isConditional()) {
+                cond = br->getCondition();
+            } else if ((swc = dyn_cast<SwitchInst>(term))) {
+                cond = swc->getCondition();
+            }
+
+            if (cond != NULL) {
+                unsigned fv = findValue(cond);
+                if (fv != -1) PhiTerm[fv] = true;
+            }
+
             for(BasicBlock* succ : successors(&BB)) {
                 for(PHINode& phi : succ->phis()) {
                     assert(findValue(&phi) != -1 && "phi term should be live.");
                     PhiTerm[findValue(&phi)] = true;
-                    //if incoming value is not used after phi, mark it as dead
-                    Value* incomeV = phi.getIncomingValueForBlock(&BB);
-                    if(findValue(incomeV) != -1 && !live[&phi][findValue(incomeV)]) {
-                        PhiTerm[findValue(incomeV)] = false;
-                    }
                 }
             }
             result.push_back(PhiTerm);
@@ -361,6 +411,16 @@ void RegisterGraph::coallocateIfPossible() {
 
             //Fetch the only user which follows right after.
             Instruction* user = dyn_cast<Instruction>(I.use_begin()->getUser());
+
+            int toChange = valueToColor[I.getFunction()][user], flag = 0;
+            for (Value *v : adjList[&I]) {
+                if (valueToColor[I.getFunction()][v] == toChange) {
+                    flag = 1;
+                    break;
+                }
+            }
+            if (flag) continue;
+
             if(I.getNextNode() != user || SAME_CONSIDER.find(user->getOpcode()) == SAME_CONSIDER.end() || findValue(user) == -1) continue;
 
             valueToColor[I.getFunction()][&I] = valueToColor[I.getFunction()][user];
