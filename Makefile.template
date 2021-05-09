@@ -14,6 +14,7 @@ all: bin/sf-compiler
 
 test: 
 	./run-filechecks.sh /llvmscript/llvm-12.0-releaseassert/bin/FileCheck
+	./run-benchmark-test.sh /llvmscript/llvm-12.0-releaseassert/bin
 
 bin/sf-compiler: $(OBJ_CORE) $(OBJ_BACKEND) $(OBJ_TEAM2_PASS)
 	@$(CXX) $(LDFLAGS) -o bin/sf-compiler $(OBJ_CORE) $(OBJ_BACKEND) $(OBJ_TEAM2_PASS)
