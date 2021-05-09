@@ -20,6 +20,9 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
 
     for (auto &BB : F) {
       for (auto &I : BB) {
+        if (!match(&I, m_BinOp())) {
+          continue;
+        }
         if(match(&I, m_Shl(m_Value(X), m_ConstantInt(C))) && C->getZExtValue() < 64 ) {
           // shl(X, C) -> mul(X, 2^C)
           Value *op2 = ConstantInt::get(C->getType(),pow(2, C->getZExtValue()));
