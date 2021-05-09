@@ -10,10 +10,24 @@
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/IR/PassManager.h"
 
+#include "llvm/Support/Debug.h"
+
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Scalar/SimplifyCFG.h"
+
+#include "llvm/Transforms/Scalar/LoopInstSimplify.h"
+#include "llvm/Transforms/Scalar/LoopPassManager.h"
+#include "llvm/Transforms/Scalar/LoopRotation.h"
+#include "llvm/Transforms/Scalar/LoopSimplifyCFG.h"
+#include "llvm/Transforms/Scalar/LoopUnrollPass.h"
+
+#include "../team2_pass/RemoveLoopMetadata.h"
+
 #include <string>
 
 using namespace std;
 using namespace llvm;
+using namespace team2_pass;
 
 int main(int argc, char *argv[]) {
   //Parse command line arguments
@@ -38,6 +52,7 @@ int main(int argc, char *argv[]) {
     return 1;
 
   // execute IR passes
+  LoopPassManager LPM;
   FunctionPassManager FPM;
   ModulePassManager MPM;
 
@@ -55,12 +70,22 @@ int main(int argc, char *argv[]) {
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-  // add existing passes
-  //FPM.addPass(InstCombinePass());
-  //FPM.addPass(GVN());
+  LPM.addPass(LoopInstSimplifyPass());
+  LPM.addPass(LoopSimplifyCFGPass());
+  LPM.addPass(LoopRotatePass());
 
-  // from FPM to MPM
+  FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM)));
+  FPM.addPass(LoopUnrollPass(LoopUnrollOptions().setPartial(true)
+                                                .setPeeling(true)
+                                                .setProfileBasedPeeling(true)
+                                                .setRuntime(true)
+                                                .setUpperBound(true)));
+  FPM.addPass(SimplifyCFGPass());
+  FPM.addPass(InstCombinePass());
+
+  MPM.addPass(RemoveLoopMetadataPass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+
   MPM.run(*M, MAM);
 
   UnfoldVectorInstPass().run(*M, MAM);
