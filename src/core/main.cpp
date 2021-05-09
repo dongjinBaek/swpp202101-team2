@@ -60,8 +60,8 @@ int main(int argc, char *argv[]) {
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
   // add existing passes
-  //FPM.addPass(SimplifyCFGPass());
-  //FPM.addPass(InstCombinePass());
+  FPM.addPass(SimplifyCFGPass());
+  FPM.addPass(InstCombinePass());
   //FPM.addPass(GVN());
 
   // from FPM to MPM

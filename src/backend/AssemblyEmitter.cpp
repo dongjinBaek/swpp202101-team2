@@ -78,6 +78,8 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
         if(spOffset[BB.getParent()] != 0) {
             *fout << "  ; Init stack pointer\n";
             *fout << emitInst({"sp = sub sp",to_string(spOffset[BB.getParent()]),"64"});
+            if (BB.getParent()->getName() == "main")
+                *fout << emitInst({"r32 = mul sp 1 64"});
         }
     }
 }
@@ -102,7 +104,8 @@ void AssemblyEmitter::visitLoadInst(LoadInst& I) {
     //if pointer operand is a memory value(GV or alloca),
     if(Memory* mem = dynamic_cast<Memory*>(symbol)) {
         if(mem->getBase() == TM->sp()) {
-            *fout << emitInst({name(&I), "= load", size ,"sp", to_string(mem->getOffset())});
+            string base = I.getParent()->getParent()->getName() == "main" ? "r32" : "sp";
+            *fout << emitInst({name(&I), "= load", size, base, to_string(mem->getOffset())});
         }
         else if(mem->getBase() == TM->gvp()) {
             *fout << emitInst({name(&I), "= load", size, "204800", to_string(mem->getOffset())});
@@ -124,7 +127,8 @@ void AssemblyEmitter::visitStoreInst(StoreInst& I) {
     //if pointer operand is a memory value(GV or alloca),
     if(Memory* mem = dynamic_cast<Memory*>(symbol)) {
         if(mem->getBase() == TM->sp()) {
-            *fout << emitInst({"store", size, name(val), "sp", to_string(mem->getOffset())});
+            string base = I.getParent()->getParent()->getName() == "main" ? "r32" : "sp";
+            *fout << emitInst({"store", size, name(val), base, to_string(mem->getOffset())});
         }
         else if(mem->getBase() == TM->gvp()) {
             *fout << emitInst({"store", size, name(val), "204800", to_string(mem->getOffset())});
@@ -171,7 +175,8 @@ void AssemblyEmitter::visitPtrToIntInst(PtrToIntInst& I) {
     //if pointer operand is a memory value(GV or alloca),
     if(Memory* mem = dynamic_cast<Memory*>(symbol)) {
         if(mem->getBase() == TM->sp()) {
-            *fout << emitBinary(&I, "add", "sp", to_string(mem->getOffset()));
+            string base = I.getParent()->getParent()->getName() == "main" ? "r32" : "sp";
+            *fout << emitBinary(&I, "add", base, to_string(mem->getOffset()));
         }
         else if(mem->getBase() == TM->gvp()) {
             *fout << emitBinary(&I, "add", "204800", to_string(mem->getOffset()));
