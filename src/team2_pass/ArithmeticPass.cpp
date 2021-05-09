@@ -73,11 +73,8 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
           // xor(X, 0) -> X
           I.replaceAllUsesWith(X);
           instsToRemove.push_back(&I);
-        } else if(match(&I, m_UDiv(m_Value(X), m_Deferred(X))) ||
-           match(&I, m_SDiv(m_Value(X), m_Deferred(X))) ||
-           match(&I, m_And(m_Value(X), m_Deferred(X))) ||
+        } else if(match(&I, m_And(m_Value(X), m_Deferred(X))) ||
            match(&I, m_Or(m_Value(X), m_Deferred(X))) ) {
-          // div(X, X) -> X
           // and(X, X) -> X
           // or(X, X) -> X
           I.replaceAllUsesWith(X);
