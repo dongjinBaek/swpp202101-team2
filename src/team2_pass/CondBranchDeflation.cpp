@@ -33,13 +33,21 @@ static bool visitAndTransform(BasicBlock *BB) {
 		return true;
 	}
 
+	bool hasRecursiveCall = false;
+	for (auto &I : *BB) {
+		CallInst *CI = dyn_cast<CallInst>(&I);
+		if (!CI) continue;
+		if (CI->getCalledFunction() == BB->getParent())				// recursive call; repeatable
+			hasRecursiveCall = true;
+	}
+
 	Instruction *TI = dyn_cast<Instruction>(BB->getTerminator());
 	assert(TI && "The terminator is an invalid instruction");
 
 	if (isa<ReturnInst>(TI)) {										// terminates with ret:
 		//outs() << "Return\n";
 		//outs() << "Leaving " << BB->getName() << '\n';
-		return false;												// not repeatable
+		return hasRecursiveCall;									// not repeatable
 	}
 	if (isa<SwitchInst>(TI)) {										// terminates with switch:
 		//outs() << "Switch\n";
@@ -52,7 +60,7 @@ static bool visitAndTransform(BasicBlock *BB) {
 		assert(v.back() == BB->getName());
 		v.pop_back();
 		//outs() << "Leaving " << BB->getName() << '\n';
-		return ret;
+		return ret || hasRecursiveCall;
 	}
 
 	BranchInst *BI = dyn_cast<BranchInst>(TI);
@@ -65,7 +73,7 @@ static bool visitAndTransform(BasicBlock *BB) {
 		assert(v.back() == BB->getName());
 		v.pop_back();
 		//outs() << "Leaving " << BB->getName() << '\n';
-		return ret;													// repeatable iff its successor is
+		return ret || hasRecursiveCall;								// repeatable iff its successor is
 	}
 	if (BI->isConditional()){										// terminates with brC:
 		//outs() << "Cond\n";
@@ -98,10 +106,10 @@ static bool visitAndTransform(BasicBlock *BB) {
 						break;
 					}
 				}
-				if (one_use) {										// ... and has no other use:
+				if (one_use) {											// ... and has no other use:
 					//outs() << "Cond is used once. Invert and swap\n";
-					ICI->setPredicate(ICI->getInversePredicate());	// invert condition
-					BI->swapSuccessors();							// and swap successors
+					ICI->setPredicate(ICI->getInversePredicate());		// invert condition
+					BI->swapSuccessors();								// and swap successors
 				}
 				//else outs() << "Cond has other use\n";
 			}
@@ -110,7 +118,7 @@ static bool visitAndTransform(BasicBlock *BB) {
 		assert(v.back() == BB->getName());
 		v.pop_back();
 		//outs() << "Leaving " << BB->getName() << '\n';
-		return mayRepeatTrue || mayRepeatFalse;
+		return mayRepeatTrue || mayRepeatFalse || hasRecursiveCall;
 	}
 	//outs() << "Unreachable!!\n";
 	return false;													// no other type of terminator; unreachable
