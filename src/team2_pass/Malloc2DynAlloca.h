@@ -6,7 +6,6 @@
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 using namespace llvm;
-using namespace std;
 
 class Malloc2DynAllocaPass : public PassInfoMixin<Malloc2DynAllocaPass> {
 public:

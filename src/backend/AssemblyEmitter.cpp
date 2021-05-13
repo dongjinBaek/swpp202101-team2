@@ -173,7 +173,6 @@ void AssemblyEmitter::visitPtrToIntInst(PtrToIntInst& I) {
     Value* ptr = I.getPointerOperand();
     Symbol* symbol = SM->get(ptr);
     //if pointer operand is a memory value(GV or alloca),
-
     if(symbol) {
         if(Memory* mem = symbol->castToMemory()) {
             if(mem->getBase() == TM->sp()) {
@@ -235,6 +234,7 @@ void AssemblyEmitter::visitCallInst(CallInst& I) {
         *fout << emitInst({name(&I), "= malloc", name(I.getArgOperand(0))});
     }
     else if (Fname == "$dyn_alloca") {
+        assert(args.size()==2 && "argument of $dyn_alloca() should be 2");
         string name0 = name(I.getArgOperand(0)), name1 = name(I.getArgOperand(1));
         static unsigned int num = 0;
         string str = to_string(num++);
