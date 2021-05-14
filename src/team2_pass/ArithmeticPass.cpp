@@ -101,53 +101,57 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
 
 void ArithmeticPass::propIntEq(Function &F, FunctionAnalysisManager &FAM) {
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-  for (auto &BB : F) {
-    BranchInst *TI = dyn_cast<BranchInst>(BB.getTerminator());
-    if (!TI)
-      continue;
-    if (TI->isUnconditional())
-      continue;
 
-    Instruction *I = dyn_cast<Instruction>(TI->getOperand(0));
-    Value *X, *Y;
-    ICmpInst::Predicate Pred;
-    if (match(I, m_ICmp(Pred, m_Value(X), m_Value(Y))) && Pred == ICmpInst::ICMP_EQ)
-    {
-      if (X->getType()->isPointerTy() || Y->getType()->isPointerTy())
-          continue;
+  //check the function again if update was made
+  bool checkForUpdate = true;
+  while (checkForUpdate) {
+    checkForUpdate = false;
+    for (auto &BB : F) {
+      Value *X, *Y;
+      ICmpInst::Predicate Pred;
+      // match "br (icmp eq iN x, y) BB_true BB_false"
+      if(match(BB.getTerminator(), m_Br(m_ICmp(Pred, m_Value(X), m_Value(Y)),
+          m_BasicBlock(BB_true), m_BasicBlock(BB_false))) && Pred == ICmpInst::ICMP_EQ &&
+          X->getType()->isIntegerTy() && Y->getType()->isIntegerTy() && X != Y && BB_true != BB_false)
+      {
+        BasicBlock *BBTrue = dyn_cast<BasicBlock>(TI->getOperand(2));
+        BasicBlockEdge BBE(&BB, BBTrue);
 
-      BasicBlock *BBTrue = dyn_cast<BasicBlock>(TI->getOperand(2));
-      BasicBlockEdge BBE(&BB, BBTrue);
-
-      Instruction *XI = dyn_cast<Instruction>(X);
-      Instruction *YI = dyn_cast<Instruction>(Y);
-      ConstantInt *XC = dyn_cast<ConstantInt>(X);
-      ConstantInt *YC = dyn_cast<ConstantInt>(Y);
-
-      if (XC && YC) {
-        continue;
-      } else if (XC) {
-        changeUseIfEdgeDominates(Y, X, DT, BBE);
-      } else if (YC) {
-        changeUseIfEdgeDominates(X, Y, DT, BBE);
-      } else {
-        if (!XI && YI) {
-          changeUseIfEdgeDominates(Y, X, DT, BBE);
-        } else {
-          changeUseIfEdgeDominates(X, Y, DT, BBE);
+        Constant *XC = dyn_cast<Constant>(X), *YC = dyn_cast<Constant>(Y);
+        Argument *XA = dyn_cast<Argument>(X), *YA = dyn_cast<Argument>(Y);
+        Instruction *XI = dyn_cast<Instruction>(X), *YI = dyn_cast<Instruction>(Y);
+        if((XC || XA || XI) && (YC || YA || YI)) {
+          Value *ChangeFrom, *ChangeTo;
+          if (XC && YC) continue;
+          if (XC ||
+              (XA && YA && XA->getArgNo() < YA->getArgNo()) ||
+              (XA && YI) ||
+              (XI && YI && DT.dominates(XI, YI))) {
+            ChangeFrom = Y;
+            ChangeTo = X;
+          }
+          else {
+            ChangeFrom = X;
+            ChangeTo = Y;
+          }
+          if (changeUseIfEdgeDominates(A, B, DT, BBE)) {
+            checkForUpdate = true;
+          }
         }
       }
     }
   }
 }
 
-void ArithmeticPass::changeUseIfEdgeDominates(Value *ChangeFrom, Value *ChangeTo, DominatorTree &DT, BasicBlockEdge &BBE) {
+bool ArithmeticPass::changeUseIfEdgeDominates(Value *ChangeFrom, Value *ChangeTo, DominatorTree &DT, BasicBlockEdge &BBE) {
+  bool changed = false;
   for (auto itr = ChangeFrom->use_begin(), end = ChangeFrom->use_end(); itr != end;) {
     Use &U = *itr++;
     if (DT.dominates(BBE, U)) {
-    outs() << "propint: " << *(dyn_cast<Instruction>(U.getUser())) << ", " << *ChangeFrom << " to " << *ChangeTo << "\n";
       U.set(ChangeTo);
+      changed = true;
     }
   }
+  return changed;
 }
 }  // namespace backend
