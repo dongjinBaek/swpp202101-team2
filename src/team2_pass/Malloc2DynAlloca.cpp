@@ -60,5 +60,5 @@ PreservedAnalyses Malloc2DynAllocaPass::run(Module &M, ModuleAnalysisManager &MA
     }
   }
 
-  return PreservedAnalyses::all();
+  return replaced ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }
