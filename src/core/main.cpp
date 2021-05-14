@@ -6,12 +6,14 @@
 #include "../backend/UnfoldVectorInst.h"
 
 #include "../team2_pass/ArithmeticPass.h"
+#include "../team2_pass/IntegerEqPropagation.h"
 
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Transforms/Scalar/GVN.h"
+#include "llvm/Transforms/Scalar/CorrelatedValuePropagation.h"
 
 #include <string>
 
@@ -61,6 +63,7 @@ int main(int argc, char *argv[]) {
   // add existing passes
   //FPM.addPass(InstCombinePass());
   //FPM.addPass(GVN());
+  FPM.addPass(IntegerEqPropagationPass());
   FPM.addPass(ArithmeticPass());
 
   // from FPM to MPM

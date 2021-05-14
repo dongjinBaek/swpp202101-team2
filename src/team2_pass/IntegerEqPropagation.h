@@ -1,5 +1,5 @@
-#ifndef ARITHMETIC_H
-#define ARITHMETIC_H
+#ifndef INTEGER_EQ_PROPAGATE_H
+#define INTEGER_EQ_PROPAGATE_H
 
 #include "llvm/IR/Function.h"
 #include "llvm/IR/BasicBlock.h"
@@ -14,15 +14,16 @@
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include <vector>
-
 using namespace llvm;
 using namespace std;
 
 namespace backend {
-class ArithmeticPass : public PassInfoMixin<ArithmeticPass> {
+class IntegerEqPropagationPass : public PassInfoMixin<IntegerEqPropagationPass> {
 public:
     PreservedAnalyses run(Function &, FunctionAnalysisManager &);
+
+private:
+    bool changeUseIfEdgeDominates(Value *ChangeFrom, Value *ChangeTo, DominatorTree &DT, BasicBlockEdge &BBE);
 };
 }
 
