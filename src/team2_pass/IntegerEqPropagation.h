@@ -17,6 +17,14 @@
 using namespace llvm;
 using namespace std;
 
+/*
+    IntegerEqPropagation Pass
+    This pass propagated integer equality.
+    For values used in icmp for conditional branch, 
+    use of one value dominated by true branch edge is replaced with the other value.
+    The value to be changed is decided with priority of Instruction > Argument > ConstantInt
+*/
+
 namespace backend {
 class IntegerEqPropagationPass : public PassInfoMixin<IntegerEqPropagationPass> {
 public:

@@ -19,6 +19,14 @@
 using namespace llvm;
 using namespace std;
 
+/*
+    Arithmetic Pass
+    This pass changes some arithmetic instuctions to other instruction or constant.
+    Inst. can be changed to other inst. with lower cost.
+    Trivial case of arithmetic inst. can be changed to constant,
+    and the use of inst. will be replaced to that constand and the inst. will be deleted.
+*/
+
 namespace backend {
 class ArithmeticPass : public PassInfoMixin<ArithmeticPass> {
 public:

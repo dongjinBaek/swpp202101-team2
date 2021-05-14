@@ -1,7 +1,3 @@
-/*
-    ArithmeticPass
-*/
-
 #include "IntegerEqPropagation.h"
 
 using namespace llvm;
