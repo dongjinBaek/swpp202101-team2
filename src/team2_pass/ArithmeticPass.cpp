@@ -108,16 +108,16 @@ void ArithmeticPass::propIntEq(Function &F, FunctionAnalysisManager &FAM) {
     checkForUpdate = false;
     for (auto &BB : F) {
       Value *X, *Y;
+      BasicBlock *BBTrue, *BBFalse;
       ICmpInst::Predicate Pred;
       // match "br (icmp eq iN x, y) BB_true BB_false"
       if(match(BB.getTerminator(), m_Br(m_ICmp(Pred, m_Value(X), m_Value(Y)),
-          m_BasicBlock(BB_true), m_BasicBlock(BB_false))) && Pred == ICmpInst::ICMP_EQ &&
-          X->getType()->isIntegerTy() && Y->getType()->isIntegerTy() && X != Y && BB_true != BB_false)
+          m_BasicBlock(BBTrue), m_BasicBlock(BBFalse))) && Pred == ICmpInst::ICMP_EQ &&
+          X->getType()->isIntegerTy() && Y->getType()->isIntegerTy() && X != Y && BBTrue != BBFalse)
       {
-        BasicBlock *BBTrue = dyn_cast<BasicBlock>(TI->getOperand(2));
         BasicBlockEdge BBE(&BB, BBTrue);
 
-        Constant *XC = dyn_cast<Constant>(X), *YC = dyn_cast<Constant>(Y);
+        Constant *XC = dyn_cast<ConstantInt>(X), *YC = dyn_cast<ConstantInt>(Y);
         Argument *XA = dyn_cast<Argument>(X), *YA = dyn_cast<Argument>(Y);
         Instruction *XI = dyn_cast<Instruction>(X), *YI = dyn_cast<Instruction>(Y);
         if((XC || XA || XI) && (YC || YA || YI)) {
@@ -134,7 +134,7 @@ void ArithmeticPass::propIntEq(Function &F, FunctionAnalysisManager &FAM) {
             ChangeFrom = X;
             ChangeTo = Y;
           }
-          if (changeUseIfEdgeDominates(A, B, DT, BBE)) {
+          if (changeUseIfEdgeDominates(ChangeFrom, ChangeTo, DT, BBE)) {
             checkForUpdate = true;
           }
         }

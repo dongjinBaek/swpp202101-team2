@@ -26,7 +26,7 @@ public:
 
 private:
     void propIntEq(Function &, FunctionAnalysisManager &);
-    void changeUseIfEdgeDominates(Value *ChangeFrom, Value *ChangeTo, DominatorTree &DT, BasicBlockEdge &BBE);
+    bool changeUseIfEdgeDominates(Value *ChangeFrom, Value *ChangeTo, DominatorTree &DT, BasicBlockEdge &BBE);
 };
 }
 
