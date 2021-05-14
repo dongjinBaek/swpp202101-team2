@@ -93,7 +93,7 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
     ReplaceInstWithInst(instPair.first, instPair.second);
   }
 
-  return PreservedAnalyses::all();
+  return PreservedAnalyses::abandon();
 }
 
 }  // namespace backend
