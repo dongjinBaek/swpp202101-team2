@@ -17,6 +17,12 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
   vector<Instruction *> instsToRemove;
   vector<pair<Instruction *, Instruction *> > instPairsToChange;
 
+  bool checkForUpdate = true;
+  while(checkForUpdate) {
+    checkForUpdate = false;
+    instsToRemove.clear();
+    instPairsToChange.clear();
+
     for (auto &BB : F) {
       for (auto &I : BB) {
         if (!match(&I, m_BinOp())) {
@@ -105,16 +111,21 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
         }
       }
     }
+    
+    if (instsToRemove.size() > 0 || instPairsToChange.size() > 0) {
+      checkForUpdate = true;
+    }
 
-  for (auto inst : instsToRemove){
-    inst->eraseFromParent();
+    for (auto inst : instsToRemove){
+      inst->eraseFromParent();
+    }
+
+    for (auto instPair : instPairsToChange){
+      ReplaceInstWithInst(instPair.first, instPair.second);
+    }
   }
 
-  for (auto instPair : instPairsToChange){
-    ReplaceInstWithInst(instPair.first, instPair.second);
-  }
-
-  return PreservedAnalyses::all();
+  return PreservedAnalyses::none();
 }
 
 }  // namespace backend
