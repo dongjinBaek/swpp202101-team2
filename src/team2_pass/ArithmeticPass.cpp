@@ -37,27 +37,14 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
             Instruction *newInst = BinaryOperator::Create(Instruction::Mul, X, op2);
             instPairsToChange.push_back(make_pair(&I, newInst));
           }
-          else {
-            // shl(X, C) -> 0
-            Value *changeTo = ConstantInt::get(X->getType(),0);
-            I.replaceAllUsesWith(changeTo);
-            instsToRemove.push_back(&I);
-          }
         } else if(match(&I, m_LShr(m_Value(X), m_ConstantInt(C))) && X->getType()->isIntegerTy() ) {
           unsigned int BW = X->getType()->getIntegerBitWidth();
           uint64_t V = C->getZExtValue();
-          outs() << V << BW << "\n";
           if (V < BW) {
             // lshr(X, C) -> udiv(X, 2^C)
             Value *op2 = ConstantInt::get(C->getType(),pow(2, V));
             Instruction *newInst = BinaryOperator::Create(Instruction::UDiv, X, op2);
             instPairsToChange.push_back(make_pair(&I, newInst));
-          }
-          else {
-            // lshr(X, C) -> 0
-            Value *changeTo = ConstantInt::get(X->getType(),0);
-            I.replaceAllUsesWith(changeTo);
-            instsToRemove.push_back(&I);
           }
         } else if(match(&I, m_Add(m_Value(X), m_Deferred(X))) ) {
           // add(X, X) -> mul(X, 2)
@@ -111,7 +98,7 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
         }
       }
     }
-    
+
     if (instsToRemove.size() > 0 || instPairsToChange.size() > 0) {
       checkForUpdate = true;
     }
