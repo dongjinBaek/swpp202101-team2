@@ -5,19 +5,25 @@
 #include "../backend/RegisterSpill.h"
 #include "../backend/UnfoldVectorInst.h"
 
+#include "../team2_pass/CondBranchDeflation.h"
+#include "../team2_pass/ArithmeticPass.h"
+#include "../team2_pass/IntegerEqPropagation.h"
+#include "../team2_pass/Malloc2DynAlloca.h"
+
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
-
-#include "../team2_pass/Malloc2DynAlloca.h"
+#include "llvm/Transforms/Scalar/GVN.h"
+#include "llvm/Transforms/Scalar/CorrelatedValuePropagation.h"
 
 #include <string>
 
 using namespace std;
 using namespace llvm;
+using namespace team2_pass;
 
 int main(int argc, char *argv[]) {
   //Parse command line arguments
@@ -61,13 +67,17 @@ int main(int argc, char *argv[]) {
 
   // add existing passes
   //FPM.addPass(InstCombinePass());
-  //FPM.addPass(GVN());
+  // FPM.addPass(GVN());
+  FPM.addPass(IntegerEqPropagationPass());
+  // FPM.addPass(GVN());
+  FPM.addPass(ArithmeticPass());
 
   // from FPM to MPM
+  MPM.addPass(CondBranchDeflationPass());
   MPM.addPass(Malloc2DynAllocaPass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   MPM.run(*M, MAM);
-
+  
   UnfoldVectorInstPass().run(*M, MAM);
   LivenessAnalysis().run(*M, MAM);
   SpillCostAnalysis().run(*M, MAM);
@@ -75,6 +85,7 @@ int main(int argc, char *argv[]) {
   ConstExprRemovePass().run(*M, MAM);
   GEPUnpackPass().run(*M, MAM);
   RegisterSpillPass().run(*M, MAM);
+
   // use this for debugging
   outs() << *M;
 
