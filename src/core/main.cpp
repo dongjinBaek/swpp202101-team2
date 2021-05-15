@@ -62,9 +62,9 @@ int main(int argc, char *argv[]) {
 
   // add existing passes
   //FPM.addPass(InstCombinePass());
-  FPM.addPass(GVN());
+  // FPM.addPass(GVN());
   FPM.addPass(IntegerEqPropagationPass());
-  FPM.addPass(GVN());
+  // FPM.addPass(GVN());
   FPM.addPass(ArithmeticPass());
 
   // from FPM to MPM
