@@ -85,9 +85,12 @@ PreservedAnalyses RegisterSpillPass::run(Module& M, ModuleAnalysisManager& MAM)
     for(Function& F : M) {
         if(F.isDeclaration()) continue;
 
+        unsigned int registerCap =
+            F.getName() == "main" ? REGISTER_CAP - 1 : REGISTER_CAP;
+
         //If spill not needed, do nothing for the function.
         unsigned numColor = RG->getNumColors(&F);
-        if(numColor <= REGISTER_CAP) continue;
+        if(numColor <= registerCap) continue;
 
         vector<float> spillCost = SpillCostResult[&F];
         
@@ -100,7 +103,7 @@ PreservedAnalyses RegisterSpillPass::run(Module& M, ModuleAnalysisManager& MAM)
         int numBuffer;
         for(spillCount = 0; spillCount <= numColor; spillCount++) {
             //numBuffer: # of leftover registers after assigning constantly-loaded colors
-            numBuffer = REGISTER_CAP-numColor+spillCount;
+            numBuffer = registerCap-numColor+spillCount;
             if(numBuffer >= 1 && spilledEnough(numBuffer, isSpilled, &F)) {
                 break;
             }
@@ -140,6 +143,9 @@ PreservedAnalyses RegisterSpillPass::run(Module& M, ModuleAnalysisManager& MAM)
 
 bool RegisterSpillPass::spilledEnough(unsigned numBuffer, vector<bool> isSpilled, Function* F) {
 
+    unsigned int registerCap =
+        F->getName() == "main" ? REGISTER_CAP - 1 : REGISTER_CAP;
+
     for(auto it = inst_begin(F); it != inst_end(F); ++it) {
         Instruction& I = *it;
 
@@ -157,7 +163,7 @@ bool RegisterSpillPass::spilledEnough(unsigned numBuffer, vector<bool> isSpilled
                 regCount++;
             }
         }
-        if(memCount > numBuffer || regCount > REGISTER_CAP - numBuffer) {
+        if(memCount > numBuffer || regCount > registerCap - numBuffer) {
             return false;
         }
     }

@@ -66,6 +66,7 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
         if(BB.getParent()->getName() == "main" && BB.getModule()->getGlobalList().size()!=0) {
             *fout << "  ; Init global variables\n";
             for(auto& gv : BB.getModule()->globals()) {
+                if (gv.getName().contains('$')) continue;
                 //temporarily stores the GV pointer.
                 unsigned size = (getAccessSize(gv.getValueType()) + 7) / 8 * 8;
                 *fout << emitInst({"r1 = malloc", to_string(size)});
@@ -77,6 +78,8 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
         if(spOffset[BB.getParent()] != 0) {
             *fout << "  ; Init stack pointer\n";
             *fout << emitInst({"sp = sub sp",to_string(spOffset[BB.getParent()]),"64"});
+            if (BB.getParent()->getName() == "main")
+                *fout << emitInst({"r32 = mul sp 1 64"});
         }
     }
 }
@@ -94,13 +97,15 @@ void AssemblyEmitter::visitAllocaInst(AllocaInst& I) {
 //Memory Access insts.
 void AssemblyEmitter::visitLoadInst(LoadInst& I) {
     Value* ptr = I.getPointerOperand();
+    if (ptr->getName().contains('$')) return;
     //bytes to load
     string size = to_string(getAccessSize(dyn_cast<PointerType>(ptr->getType())->getElementType()));
     Symbol* symbol = SM->get(ptr);
     //if pointer operand is a memory value(GV or alloca),
     if(Memory* mem = symbol->castToMemory()) {
         if(mem->getBase() == TM->sp()) {
-            *fout << emitInst({name(&I), "= load", size ,"sp", to_string(mem->getOffset())});
+            string base = I.getParent()->getParent()->getName() == "main" ? "r32" : "sp";
+            *fout << emitInst({name(&I), "= load", size, base, to_string(mem->getOffset())});
         }
         else if(mem->getBase() == TM->gvp()) {
             *fout << emitInst({name(&I), "= load", size, "204800", to_string(mem->getOffset())});
@@ -122,7 +127,8 @@ void AssemblyEmitter::visitStoreInst(StoreInst& I) {
     //if pointer operand is a memory value(GV or alloca),
     if(Memory* mem = symbol->castToMemory()) {
         if(mem->getBase() == TM->sp()) {
-            *fout << emitInst({"store", size, name(val), "sp", to_string(mem->getOffset())});
+            string base = I.getParent()->getParent()->getName() == "main" ? "r32" : "sp";
+            *fout << emitInst({"store", size, name(val), base, to_string(mem->getOffset())});
         }
         else if(mem->getBase() == TM->gvp()) {
             *fout << emitInst({"store", size, name(val), "204800", to_string(mem->getOffset())});
@@ -170,7 +176,8 @@ void AssemblyEmitter::visitPtrToIntInst(PtrToIntInst& I) {
     if(symbol) {
         if(Memory* mem = symbol->castToMemory()) {
             if(mem->getBase() == TM->sp()) {
-                *fout << emitBinary(&I, "add", "sp", to_string(mem->getOffset()));
+                string base = I.getParent()->getParent()->getName() == "main" ? "r32" : "sp";
+                *fout << emitBinary(&I, "add", base, to_string(mem->getOffset()));
             }
             else if(mem->getBase() == TM->gvp()) {
                 *fout << emitBinary(&I, "add", "204800", to_string(mem->getOffset()));
@@ -225,6 +232,22 @@ void AssemblyEmitter::visitCallInst(CallInst& I) {
     if(Fname == "malloc") {
         assert(args.size()==1 && "argument of malloc() should be 1");
         *fout << emitInst({name(&I), "= malloc", name(I.getArgOperand(0))});
+    }
+    else if (Fname == "$dyn_alloca") {
+        assert(args.size()==2 && "argument of $dyn_alloca() should be 2");
+        string name0 = name(I.getArgOperand(0)), name1 = name(I.getArgOperand(1));
+        static unsigned int num = 0;
+        string str = to_string(num++);
+        *fout << emitInst({name1, "= icmp ult sp", name0, "64"});
+        *fout << emitInst({"br", name1, ".__sp.then" + str, ".__sp.else" + str});
+        *fout << ".__sp.then" + str << ":\n";
+        *fout << emitInst({name(&I), "= malloc", name0});
+        *fout << emitInst({"br .__sp.next" + str});
+        *fout << ".__sp.else" + str << ":\n";
+        *fout << emitInst({"sp = sub sp", name0, "64"});
+        *fout << emitInst({name(&I), "= mul sp 1 64"});
+        *fout << emitInst({"br .__sp.next" + str});
+        *fout << ".__sp.next" + str << ":\n";
     }
     else if(Fname == "free") {
         assert(args.size()==1 && "argument of free() should be 1");

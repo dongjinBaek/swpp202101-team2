@@ -5,10 +5,19 @@
 #include "../backend/RegisterSpill.h"
 #include "../backend/UnfoldVectorInst.h"
 
+#include "../team2_pass/CondBranchDeflation.h"
+#include "../team2_pass/ArithmeticPass.h"
+#include "../team2_pass/IntegerEqPropagation.h"
+#include "../team2_pass/Malloc2DynAlloca.h"
+
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/IR/PassManager.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Scalar/SimplifyCFG.h"
+#include "llvm/Transforms/Scalar/GVN.h"
+#include "llvm/Transforms/Scalar/CorrelatedValuePropagation.h"
 
 #include "llvm/Support/Debug.h"
 
@@ -55,6 +64,7 @@ int main(int argc, char *argv[]) {
   LoopPassManager LPM;
   FunctionPassManager FPM;
   ModulePassManager MPM;
+  CGSCCPassManager CPM;
 
   LoopAnalysisManager LAM;
   FunctionAnalysisManager FAM;
@@ -71,6 +81,17 @@ int main(int argc, char *argv[]) {
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
+  // malloc 2 alloca passes
+  CPM.addPass(InlinerPass());
+  MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(std::move(CPM)));
+  MPM.addPass(Malloc2DynAllocaPass());
+  
+  // cond branch pass
+  MPM.addPass(CondBranchDeflationPass());
+   
+  // loop passes
+  MPM.addPass(RemoveLoopMetadataPass());
+  
   LPM.addPass(LoopInstSimplifyPass());
   LPM.addPass(LoopSimplifyCFGPass());
   LPM.addPass(LoopRotatePass());
@@ -81,14 +102,22 @@ int main(int argc, char *argv[]) {
                                                 .setProfileBasedPeeling(true)
                                                 .setRuntime(true)
                                                 .setUpperBound(true)));
+  
+  // simplify passes
   FPM.addPass(SimplifyCFGPass());
   FPM.addPass(InstCombinePass());
-
-  MPM.addPass(RemoveLoopMetadataPass());
+  
+  // arithmetic passes
+  FPM.addPass(GVN());
+  FPM.addPass(IntegerEqPropagationPass());
+  FPM.addPass(GVN());
+  FPM.addPass(ArithmeticPass());
+  FPM.addPass(SimplifyCFGPass());
+  
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
-
+  
   MPM.run(*M, MAM);
-
+  
   UnfoldVectorInstPass().run(*M, MAM);
   LivenessAnalysis().run(*M, MAM);
   SpillCostAnalysis().run(*M, MAM);
@@ -96,6 +125,7 @@ int main(int argc, char *argv[]) {
   ConstExprRemovePass().run(*M, MAM);
   GEPUnpackPass().run(*M, MAM);
   RegisterSpillPass().run(*M, MAM);
+
   // use this for debugging
   outs() << *M;
 
