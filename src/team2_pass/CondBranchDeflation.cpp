@@ -26,6 +26,7 @@ vector<StringRef> v;	// visit stack
 /* recursively called on successors */
 /* traverse the CFG depth-first, post-order */
 /* modify the terminator when appropriate */
+/* return true if the edge (BB's predecessor, BB) is repeatable */
 static bool visitAndTransform(BasicBlock *BB) {
 	//outs() << "Visiting " << BB->getName() << '\n';
 	if (find(v.begin(), v.end(), BB->getName()) != v.end()) {		// visited twice; cycle detected; repeatable
