@@ -8,11 +8,14 @@
 #include "../team2_pass/CondBranchDeflation.h"
 #include "../team2_pass/ArithmeticPass.h"
 #include "../team2_pass/IntegerEqPropagation.h"
+#include "../team2_pass/Malloc2DynAlloca.h"
 
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/IR/PassManager.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Scalar/SimplifyCFG.h"
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/Transforms/Scalar/CorrelatedValuePropagation.h"
 
@@ -70,10 +73,10 @@ int main(int argc, char *argv[]) {
   FPM.addPass(ArithmeticPass());
 
   // from FPM to MPM
+  MPM.addPass(CondBranchDeflationPass());
+  MPM.addPass(Malloc2DynAllocaPass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   MPM.run(*M, MAM);
-
-  CondBranchDeflationPass().run(*M, MAM);
   
   UnfoldVectorInstPass().run(*M, MAM);
   LivenessAnalysis().run(*M, MAM);
