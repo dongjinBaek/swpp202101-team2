@@ -40,3 +40,6 @@ bin
 
 # Editor
 .vscode
+
+# C Files in filechecks directory
+filechecks/*.c

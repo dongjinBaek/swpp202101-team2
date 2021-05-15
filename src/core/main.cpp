@@ -19,6 +19,19 @@
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/Transforms/Scalar/CorrelatedValuePropagation.h"
 
+#include "llvm/Support/Debug.h"
+
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Scalar/SimplifyCFG.h"
+
+#include "llvm/Transforms/Scalar/LoopInstSimplify.h"
+#include "llvm/Transforms/Scalar/LoopPassManager.h"
+#include "llvm/Transforms/Scalar/LoopRotation.h"
+#include "llvm/Transforms/Scalar/LoopSimplifyCFG.h"
+#include "llvm/Transforms/Scalar/LoopUnrollPass.h"
+
+#include "../team2_pass/RemoveLoopMetadata.h"
+
 #include <string>
 
 using namespace std;
@@ -48,8 +61,10 @@ int main(int argc, char *argv[]) {
     return 1;
 
   // execute IR passes
+  LoopPassManager LPM;
   FunctionPassManager FPM;
   ModulePassManager MPM;
+  CGSCCPassManager CPM;
 
   LoopAnalysisManager LAM;
   FunctionAnalysisManager FAM;
@@ -58,6 +73,7 @@ int main(int argc, char *argv[]) {
 
   PassBuilder PB;
 
+
   // register all the basic analyses with the managers.
   PB.registerModuleAnalyses(MAM);
   PB.registerCGSCCAnalyses(CGAM);
@@ -65,17 +81,41 @@ int main(int argc, char *argv[]) {
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-  // add existing passes
-  //FPM.addPass(InstCombinePass());
-  // FPM.addPass(GVN());
-  FPM.addPass(IntegerEqPropagationPass());
-  // FPM.addPass(GVN());
-  FPM.addPass(ArithmeticPass());
-
-  // from FPM to MPM
-  MPM.addPass(CondBranchDeflationPass());
+  // malloc 2 alloca passes
+  CPM.addPass(InlinerPass());
+  MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(std::move(CPM)));
   MPM.addPass(Malloc2DynAllocaPass());
+  
+  // cond branch pass
+  MPM.addPass(CondBranchDeflationPass());
+   
+  // loop passes
+  MPM.addPass(RemoveLoopMetadataPass());
+  
+  LPM.addPass(LoopInstSimplifyPass());
+  LPM.addPass(LoopSimplifyCFGPass());
+  LPM.addPass(LoopRotatePass());
+
+  FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM)));
+  FPM.addPass(LoopUnrollPass(LoopUnrollOptions().setPartial(true)
+                                                .setPeeling(true)
+                                                .setProfileBasedPeeling(true)
+                                                .setRuntime(true)
+                                                .setUpperBound(true)));
+  
+  // simplify passes
+  FPM.addPass(SimplifyCFGPass());
+  FPM.addPass(InstCombinePass());
+  
+  // arithmetic passes
+  FPM.addPass(GVN());
+  FPM.addPass(IntegerEqPropagationPass());
+  FPM.addPass(GVN());
+  FPM.addPass(ArithmeticPass());
+  FPM.addPass(SimplifyCFGPass());
+  
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+  
   MPM.run(*M, MAM);
   
   UnfoldVectorInstPass().run(*M, MAM);
