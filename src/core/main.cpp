@@ -5,7 +5,6 @@
 #include "../backend/RegisterSpill.h"
 #include "../backend/UnfoldVectorInst.h"
 
-#include "../team2_pass/CondBranchDeflation.h"
 #include "../team2_pass/ArithmeticPass.h"
 #include "../team2_pass/IntegerEqPropagation.h"
 
@@ -20,7 +19,6 @@
 
 using namespace std;
 using namespace llvm;
-using namespace team2_pass;
 
 int main(int argc, char *argv[]) {
   //Parse command line arguments
@@ -73,8 +71,6 @@ int main(int argc, char *argv[]) {
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   MPM.run(*M, MAM);
 
-  CondBranchDeflationPass().run(*M, MAM);
-  
   UnfoldVectorInstPass().run(*M, MAM);
   LivenessAnalysis().run(*M, MAM);
   SpillCostAnalysis().run(*M, MAM);
