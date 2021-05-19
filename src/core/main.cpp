@@ -20,6 +20,7 @@
 #include "llvm/Transforms/Scalar/CorrelatedValuePropagation.h"
 
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/CommandLine.h"
 
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
@@ -38,11 +39,34 @@ using namespace std;
 using namespace llvm;
 using namespace team2_pass;
 
+static cl::OptionCategory optCategory("SWPP Compiler options");
+
+static cl::opt<string> optInput(
+    cl::Positional, cl::desc("<input bitcode file>"), cl::Required,
+    cl::value_desc("filename"), cl::cat(optCategory));
+
+static cl::opt<string> optOutput(
+    cl::Positional, cl::desc("output assembly file"), cl::cat(optCategory),
+    cl::init("a.s"));
+
+static cl::list<string> optUsePass("p", cl::desc("used passes"), cl::cat(optCategory));
+
+bool shouldUsePass(string arg)
+{
+  if (optUsePass.size() == 0) {
+    return true;
+  }
+  for (unsigned i=0; i < optUsePass.size(); ++i) {
+    if (arg == optUsePass[i]) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int main(int argc, char *argv[]) {
+  cl::ParseCommandLineOptions(argc, argv);
   //Parse command line arguments
-  if(argc!=3) return -1;
-  string optInput = argv[1];
-  string optOutput = argv[2];
   bool optPrintProgress = false;
 
   //Parse input LLVM IR module
@@ -81,38 +105,50 @@ int main(int argc, char *argv[]) {
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-  // malloc 2 alloca passes
-  CPM.addPass(InlinerPass());
-  MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(std::move(CPM)));
-  MPM.addPass(Malloc2DynAllocaPass());
+  if (shouldUsePass("InlinerPass")) {
+    CPM.addPass(InlinerPass());
+    MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(std::move(CPM)));
+  }
+  if (shouldUsePass("Malloc2DynAllocaPass")) {
+    // malloc 2 alloca passes
+    MPM.addPass(Malloc2DynAllocaPass());
+  }
   
-  // cond branch pass
-  MPM.addPass(CondBranchDeflationPass());
-   
-  // loop passes
-  MPM.addPass(RemoveLoopMetadataPass());
+  if (shouldUsePass("CondBranchDeflationPass")) {
+    // cond branch pass
+    MPM.addPass(CondBranchDeflationPass());
+  }
   
-  LPM.addPass(LoopInstSimplifyPass());
-  LPM.addPass(LoopSimplifyCFGPass());
-  LPM.addPass(LoopRotatePass());
+  if (shouldUsePass("LoopUnrollPass")) {
+    // loop passes
+    MPM.addPass(RemoveLoopMetadataPass());
+    
+    LPM.addPass(LoopInstSimplifyPass());
+    LPM.addPass(LoopSimplifyCFGPass());
+    LPM.addPass(LoopRotatePass());
 
-  FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM)));
-  FPM.addPass(LoopUnrollPass(LoopUnrollOptions().setPartial(true)
-                                                .setPeeling(true)
-                                                .setProfileBasedPeeling(true)
-                                                .setRuntime(true)
-                                                .setUpperBound(true)));
+    FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM)));
+    FPM.addPass(LoopUnrollPass(LoopUnrollOptions().setPartial(true)
+                                                  .setPeeling(true)
+                                                  .setProfileBasedPeeling(true)
+                                                  .setRuntime(true)
+                                                  .setUpperBound(true)));
+  }
   
-  // simplify passes
-  FPM.addPass(SimplifyCFGPass());
-  FPM.addPass(InstCombinePass());
-  
-  // arithmetic passes
-  FPM.addPass(GVN());
-  FPM.addPass(IntegerEqPropagationPass());
-  FPM.addPass(GVN());
-  FPM.addPass(ArithmeticPass());
-  FPM.addPass(SimplifyCFGPass());
+  if (shouldUsePass("SimplifyPasses")) {
+    // // simplify passes
+    FPM.addPass(SimplifyCFGPass());
+    FPM.addPass(InstCombinePass());
+  }
+    
+  if (shouldUsePass("ArithmeticPass")) {
+    // arithmetic passes
+    FPM.addPass(GVN());
+    FPM.addPass(IntegerEqPropagationPass());
+    FPM.addPass(GVN());
+    FPM.addPass(ArithmeticPass());
+    FPM.addPass(SimplifyCFGPass());
+  }
   
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   
