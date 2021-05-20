@@ -13,11 +13,15 @@ Difference VectorizePass::getDifference(Value *V1, Value *V2) {
   if (V1 == V2)
     return {true, 0};
 
-  // consider zext as same value
+  // consider zext, sext as same value
+  SExtInst *S1 = dyn_cast<SExtInst>(V1);
+  SExtInst *S2 = dyn_cast<SExtInst>(V2);
   ZExtInst *Z1 = dyn_cast<ZExtInst>(V1);
   ZExtInst *Z2 = dyn_cast<ZExtInst>(V2);
   if (Z1) return getDifference(Z1->getOperand(0), V2);
+  if (S1) return getDifference(S1->getOperand(0), V2);
   if (Z2) return getDifference(V1, Z2->getOperand(0));
+  if (S2) return getDifference(V1, S2->getOperand(0));
   
   // constant
   ConstantInt *C1 = dyn_cast<ConstantInt>(V1);
