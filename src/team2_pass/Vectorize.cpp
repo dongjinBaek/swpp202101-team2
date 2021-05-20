@@ -217,7 +217,7 @@ void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVec
     }
 
     for (int i = 0; i < vectorSize; i++)
-      VectInsts[i]->removeFromParent();
+      VectInsts[i]->eraseFromParent();
   }
   else {
     Value *Args[vectorSize + 2];
