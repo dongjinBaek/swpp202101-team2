@@ -10,6 +10,8 @@
 #include "../team2_pass/ArithmeticPass.h"
 #include "../team2_pass/IntegerEqPropagation.h"
 #include "../team2_pass/Malloc2DynAlloca.h"
+#include "../team2_pass/RemoveLoopMetadata.h"
+#include "../team2_pass/Vectorize.h"
 
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
@@ -31,8 +33,6 @@
 #include "llvm/Transforms/Scalar/LoopRotation.h"
 #include "llvm/Transforms/Scalar/LoopSimplifyCFG.h"
 #include "llvm/Transforms/Scalar/LoopUnrollPass.h"
-
-#include "../team2_pass/RemoveLoopMetadata.h"
 
 #include <string>
 
@@ -98,6 +98,9 @@ int main(int argc, char *argv[]) {
 
   PassBuilder PB;
 
+  // DebugFlag = true;
+  // const char *debugTypes[] = {"vectorize", "loop-unroll"};
+  // setCurrentDebugTypes(debugTypes, 2);
 
   // register all the basic analyses with the managers.
   PB.registerModuleAnalyses(MAM);
@@ -106,19 +109,19 @@ int main(int argc, char *argv[]) {
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-  if (shouldUsePass("InlinerPass")) {
-    CPM.addPass(InlinerPass());
-    MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(std::move(CPM)));
-  }
-  if (shouldUsePass("Malloc2DynAllocaPass")) {
-    // malloc 2 alloca passes
-    MPM.addPass(Malloc2DynAllocaPass());
-  }
+  // if (shouldUsePass("InlinerPass")) {
+  //   CPM.addPass(InlinerPass());
+  //   MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(std::move(CPM)));
+  // }
+  // if (shouldUsePass("Malloc2DynAllocaPass")) {
+  //   // malloc 2 alloca passes
+  //   MPM.addPass(Malloc2DynAllocaPass());
+  // }
   
-  if (shouldUsePass("CondBranchDeflationPass")) {
-    // cond branch pass
-    MPM.addPass(CondBranchDeflationPass());
-  }
+  // if (shouldUsePass("CondBranchDeflationPass")) {
+  //   // cond branch pass
+  //   MPM.addPass(CondBranchDeflationPass());
+  // }
   
   if (shouldUsePass("LoopUnrollPass")) {
     // loop passes
@@ -127,7 +130,7 @@ int main(int argc, char *argv[]) {
     LPM.addPass(LoopInstSimplifyPass());
     LPM.addPass(LoopSimplifyCFGPass());
     LPM.addPass(LoopRotatePass());
-
+    
     FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM)));
     FPM.addPass(LoopUnrollPass(LoopUnrollOptions().setPartial(true)
                                                   .setPeeling(true)
@@ -137,23 +140,27 @@ int main(int argc, char *argv[]) {
   }
   
   if (shouldUsePass("SimplifyPasses")) {
-    // // simplify passes
+    // simplify passes
     FPM.addPass(SimplifyCFGPass());
-    FPM.addPass(InstCombinePass());
+    // FPM.addPass(InstCombinePass());
   }
-    
-  if (shouldUsePass("ArithmeticPass")) {
-    // arithmetic passes
-    FPM.addPass(GVN());
-    FPM.addPass(IntegerEqPropagationPass());
-    FPM.addPass(GVN());
-    FPM.addPass(ArithmeticPass());
-    FPM.addPass(SimplifyCFGPass());
-  }
+  
+  // if (shouldUsePass("ArithmeticPass")) {
+  //   // arithmetic passes
+  //   FPM.addPass(GVN());
+  //   FPM.addPass(IntegerEqPropagationPass());
+  //   FPM.addPass(GVN());
+  //   FPM.addPass(ArithmeticPass());
+  //   FPM.addPass(SimplifyCFGPass());
+  // }
   
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+  MPM.addPass(VectorizePass());
+  MPM.addPass(createModuleToFunctionPassAdaptor(InstCombinePass()));
   
   MPM.run(*M, MAM);
+
+  outs() << *M;
   
   SplitSelfLoopPass().run(*M, MAM);
   UnfoldVectorInstPass().run(*M, MAM);
@@ -165,7 +172,7 @@ int main(int argc, char *argv[]) {
   RegisterSpillPass().run(*M, MAM);
 
   // use this for debugging
-  outs() << *M;
+  // outs() << *M;
 
   // execute backend to emit assembly
   Backend B(optOutput, optPrintProgress);
