@@ -165,8 +165,6 @@ int main(int argc, char *argv[]) {
   
   MPM.run(*M, MAM);
 
-  outs() << *M;
-  
   SplitSelfLoopPass().run(*M, MAM);
   UnfoldVectorInstPass().run(*M, MAM);
   LivenessAnalysis().run(*M, MAM);
@@ -177,7 +175,7 @@ int main(int argc, char *argv[]) {
   RegisterSpillPass().run(*M, MAM);
 
   // use this for debugging
-  // outs() << *M;
+  outs() << *M;
 
   // execute backend to emit assembly
   Backend B(optOutput, optPrintProgress);
