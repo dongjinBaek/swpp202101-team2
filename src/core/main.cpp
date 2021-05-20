@@ -27,6 +27,7 @@
 
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
+#include "llvm/Transforms/Scalar/DCE.h"
 
 #include "llvm/Transforms/Scalar/LoopInstSimplify.h"
 #include "llvm/Transforms/Scalar/LoopPassManager.h"
@@ -86,8 +87,6 @@ int main(int argc, char *argv[]) {
     return 1;
 
   // execute IR passes
-  LoopPassManager LPM;
-  FunctionPassManager FPM;
   ModulePassManager MPM;
   CGSCCPassManager CPM;
 
@@ -109,54 +108,60 @@ int main(int argc, char *argv[]) {
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-  // if (shouldUsePass("InlinerPass")) {
-  //   CPM.addPass(InlinerPass());
-  //   MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(std::move(CPM)));
-  // }
-  // if (shouldUsePass("Malloc2DynAllocaPass")) {
-  //   // malloc 2 alloca passes
-  //   MPM.addPass(Malloc2DynAllocaPass());
-  // }
+  if (shouldUsePass("InlinerPass")) {
+    CPM.addPass(InlinerPass());
+    MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(std::move(CPM)));
+  }
+  if (shouldUsePass("Malloc2DynAllocaPass")) {
+    // malloc 2 alloca passes
+    MPM.addPass(Malloc2DynAllocaPass());
+  }
   
-  // if (shouldUsePass("CondBranchDeflationPass")) {
-  //   // cond branch pass
-  //   MPM.addPass(CondBranchDeflationPass());
-  // }
+  if (shouldUsePass("CondBranchDeflationPass")) {
+    // cond branch pass
+    MPM.addPass(CondBranchDeflationPass());
+  }
   
-  if (shouldUsePass("LoopUnrollPass")) {
+  if (shouldUsePass("LoopUnrollPass") || shouldUsePass("VectorizePass")) {
     // loop passes
+    LoopPassManager LPM1;
+    FunctionPassManager FPM1;
+
     MPM.addPass(RemoveLoopMetadataPass());
     
-    LPM.addPass(LoopInstSimplifyPass());
-    LPM.addPass(LoopSimplifyCFGPass());
-    LPM.addPass(LoopRotatePass());
+    LPM1.addPass(LoopInstSimplifyPass());
+    LPM1.addPass(LoopSimplifyCFGPass());
+    LPM1.addPass(LoopRotatePass());
     
-    FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM)));
-    FPM.addPass(LoopUnrollPass(LoopUnrollOptions().setPartial(true)
-                                                  .setPeeling(true)
-                                                  .setProfileBasedPeeling(true)
-                                                  .setRuntime(true)
-                                                  .setUpperBound(true)));
+    FPM1.addPass(createFunctionToLoopPassAdaptor(std::move(LPM1)));
+    FPM1.addPass(LoopUnrollPass(LoopUnrollOptions().setPartial(true)
+                                                   .setPeeling(true)
+                                                   .setProfileBasedPeeling(true)
+                                                   .setRuntime(true)
+                                                   .setUpperBound(true)));
+    FPM1.addPass(SimplifyCFGPass());
+
+    MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM1)));
+  }
+
+  if (shouldUsePass("VectorizePass")) {
+    // vectorize passes
+    MPM.addPass(VectorizePass());
+    MPM.addPass(createModuleToFunctionPassAdaptor(InstCombinePass()));
   }
   
-  if (shouldUsePass("SimplifyPasses")) {
-    // simplify passes
-    FPM.addPass(SimplifyCFGPass());
-    // FPM.addPass(InstCombinePass());
+  if (shouldUsePass("ArithmeticPass")) {
+    // arithmetic passes
+    FunctionPassManager FPM2;
+
+    FPM2.addPass(GVN());
+    FPM2.addPass(IntegerEqPropagationPass());
+    FPM2.addPass(GVN());
+    FPM2.addPass(ArithmeticPass());
+    FPM2.addPass(SimplifyCFGPass());
+    
+    MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM2)));
   }
-  
-  // if (shouldUsePass("ArithmeticPass")) {
-  //   // arithmetic passes
-  //   FPM.addPass(GVN());
-  //   FPM.addPass(IntegerEqPropagationPass());
-  //   FPM.addPass(GVN());
-  //   FPM.addPass(ArithmeticPass());
-  //   FPM.addPass(SimplifyCFGPass());
-  // }
-  
-  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
-  MPM.addPass(VectorizePass());
-  MPM.addPass(createModuleToFunctionPassAdaptor(InstCombinePass()));
   
   MPM.run(*M, MAM);
 
