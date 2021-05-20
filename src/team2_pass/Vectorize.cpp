@@ -121,7 +121,9 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
                    << diff.value << "  offsetExist: " << offsetExist << "\n";);
 
         // To sink vectorized load instruction, CurI should come before BaseI's first user instruction
-        if (isBaseLoad && FirstUser && FirstUser->comesBefore(CurI)) {
+        if (isBaseLoad && FirstUser &&
+            FirstUser->getParent() == CurI->getParent() && 
+            FirstUser->comesBefore(CurI)) {
           LLVM_DEBUG(dbgs() << "  CurI is after first user of BaseI" << "\n");
           NextBaseI = NextBaseI ? NextBaseI : CurI;
           break;
