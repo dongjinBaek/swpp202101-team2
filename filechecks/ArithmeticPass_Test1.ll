@@ -1,4 +1,4 @@
-define void @main(i32 %a, i32 %b, i16 %c, i16 %d) {
+define i32 @main(i32 %a, i32 %b, i16 %c, i16 %d) {
 ; CHECK: start main 4:
 entry:
     %0 = add i32 %a, %a
@@ -12,7 +12,7 @@ entry:
     %8 = add i32 %7, %6
     %9 = udiv i32 %a, %a
     %10 = add i32 %a, %9
-    ret void
+    ret i32 %0
 }
 ;CHECK: .entry:
 ;CHECK-NEXT: r[[#]] = mul arg1 2 32 
