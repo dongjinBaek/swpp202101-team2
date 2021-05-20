@@ -48,8 +48,7 @@ Difference VectorizePass::getDifference(Value *V1, Value *V2) {
   // gep
   GetElementPtrInst *GEP1 = dyn_cast<GetElementPtrInst>(V1);
   GetElementPtrInst *GEP2 = dyn_cast<GetElementPtrInst>(V2);
-  if (GEP1 && GEP2) {
-    assert(GEP1->getNumOperands() == 2 && GEP2->getNumOperands() == 2);
+  if (GEP1 && GEP2 && GEP1->getNumOperands() == 2 && GEP2->getNumOperands() == 2) {
     if (GEP1->getOperand(0) == GEP2->getOperand(0)) {
       return getDifference(GEP1->getOperand(1), GEP2->getOperand(1));
     }
@@ -67,7 +66,7 @@ Difference VectorizePass::getDifference(Value *V1, Value *V2) {
     }
 
     // case 2: V1 = gep V2 C
-    if (GEP1) {
+    if (GEP1 && GEP1->getNumOperands() == 2) {
       Value *OP1 = GEP1->getOperand(0);
       ConstantInt *OP2 = dyn_cast<ConstantInt>(GEP1->getOperand(1));
       if (V1 == V2) return {true, sign * OP2->getSExtValue()};
