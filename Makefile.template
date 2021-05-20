@@ -13,8 +13,8 @@ _dummy := $(shell mkdir -p obj obj/core obj/backend obj/team2_pass bin)
 all: bin/sf-compiler
 
 test: 
-	./run-filechecks.sh /llvmscript/llvm-12.0-releaseassert/bin/FileCheck
-	./run-benchmark-test.sh /llvmscript/llvm-12.0-releaseassert/bin
+	./run-filechecks.sh $(FILECHECK_PATH)
+	./run-benchmark-test.sh $(LLVM_BIN_PATH)
 
 bin/sf-compiler: $(OBJ_CORE) $(OBJ_BACKEND) $(OBJ_TEAM2_PASS)
 	@$(CXX) $(LDFLAGS) -o bin/sf-compiler $(OBJ_CORE) $(OBJ_BACKEND) $(OBJ_TEAM2_PASS)
@@ -27,7 +27,7 @@ obj/backend/%.o: src/backend/%.cpp $(filter-out src/backend/%.h, $(SRC_BACKEND))
 	@echo "compiling src/backend/$<..."
 	@$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-obj/team2_pass/%.o: src/team2_pass/%.cpp $(filter-out src/team2_pass/%.h, $(SRC_TEAM2_PASS))
+obj/team2_pass/%.o: src/team2_pass/%.cpp
 	@echo "compiling src/team2_pass/$<..."
 	@$(CXX) $(CXXFLAGS) -c -o $@ $<
 
