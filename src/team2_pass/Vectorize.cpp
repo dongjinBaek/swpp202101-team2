@@ -193,10 +193,16 @@ void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVec
     dbgs() << "\n";
   );
   int vectorSize = VectInsts.size();
-  assert(vectorSize == 2 || vectorSize == 4 || vectorSize == 8 && "vectorSize should be 2, 4, or 8");
+  if (!(vectorSize == 2 || vectorSize == 4 || vectorSize == 8)) {
+    LLVM_DEBUG(dbgs() << "VCT: vectorSize is not 2, 4, or 8";);
+    return;
+  }
 
   for (int i = 0; i < vectorSize; i++)
-    assert(Offsets[i] == i && "Vectorize offsets should be equal to their index");  
+    if (Offsets[i] != i) {
+      LLVM_DEBUG(dbgs() << "VCT: offsets are not in order";);
+      return;
+    }
 
   // make call instruction(s) and replace uses if needed
   Instruction *InsertAfter = VectInsts.back();
@@ -233,6 +239,8 @@ void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVec
     for (int i = 0; i < vectorSize; i++)
       VectInsts[i]->eraseFromParent();
   }
+
+  LLVM_DEBUG(dbgs() << "VCT: vectorize done";);
 }
 
 void VectorizePass::declareFunctions(Module &M) {
