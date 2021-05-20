@@ -125,14 +125,14 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
             FirstUser->getParent() == CurI->getParent() && 
             FirstUser->comesBefore(CurI)) {
           LLVM_DEBUG(dbgs() << "  CurI is after first user of BaseI" << "\n");
-          NextBaseI = NextBaseI ? NextBaseI : CurI;
+          NextBaseI = CurI;
           break;
         }
 
         // known-diff load/stores can be vectorized, except some case
         if (diff.known) {
           if (offsetExist) {
-            NextBaseI = NextBaseI ? NextBaseI : CurI;
+            NextBaseI = CurI;
             break;
           }
 
@@ -141,13 +141,10 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
             Offsets.push_back(diff.value);
           }
         }
-        // unknown-diff load/stores generally stops vectorize
+        // unknown-diff load/stores stops vectorize
         else {
-          NextBaseI = NextBaseI ? NextBaseI : CurI;
-
-          // only the case when BaseI is load and CurI is load can continue
-          if (!(isBaseLoad && LI))
-            break;
+          NextBaseI = CurI;
+          break;
         }
       }
       // function call can access memory
@@ -160,12 +157,8 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
           continue;
         else {
           LLVM_DEBUG(dbgs() << *CI << " calls memory accessing function\n";);
-          if (NextBaseI)
-            break;
-          else {
-            NextBaseI = findNextBaseInstruction(CurI);
-            break;
-          }
+          NextBaseI = findNextBaseInstruction(CurI);
+          break;
         }
       }
     }
