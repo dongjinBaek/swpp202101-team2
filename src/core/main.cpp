@@ -10,6 +10,7 @@
 #include "../team2_pass/ArithmeticPass.h"
 #include "../team2_pass/IntegerEqPropagation.h"
 #include "../team2_pass/Malloc2DynAlloca.h"
+#include "../team2_pass/ExtractFromLoopPass.h"
 
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
@@ -31,6 +32,7 @@
 #include "llvm/Transforms/Scalar/LoopRotation.h"
 #include "llvm/Transforms/Scalar/LoopSimplifyCFG.h"
 #include "llvm/Transforms/Scalar/LoopUnrollPass.h"
+#include "llvm/Transforms/Scalar/LICM.h"
 
 #include "../team2_pass/RemoveLoopMetadata.h"
 
@@ -87,6 +89,7 @@ int main(int argc, char *argv[]) {
 
   // execute IR passes
   LoopPassManager LPM;
+  LoopPassManager LPM2;
   FunctionPassManager FPM;
   ModulePassManager MPM;
   CGSCCPassManager CPM;
@@ -118,6 +121,15 @@ int main(int argc, char *argv[]) {
   if (shouldUsePass("CondBranchDeflationPass")) {
     // cond branch pass
     MPM.addPass(CondBranchDeflationPass());
+  }
+
+  if (shouldUsePass("ExtractFromLoopPass")) {
+    LPM.addPass(LICMPass());
+    FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM)));
+    FPM.addPass(ExtractFromLoopPass());
+    LPM2.addPass(LICMPass());
+    FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM2)));
+    FPM.addPass(ExtractFromLoopPass());
   }
   
   if (shouldUsePass("LoopUnrollPass")) {
