@@ -15,6 +15,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <vector>
+#include <string>
 
 using namespace llvm;
 using namespace std;
