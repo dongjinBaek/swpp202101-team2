@@ -198,13 +198,13 @@ void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVec
   );
   int vectorSize = VectInsts.size();
   if (!(vectorSize == 2 || vectorSize == 4 || vectorSize == 8)) {
-    LLVM_DEBUG(dbgs() << "VCT: vectorSize is not 2, 4, or 8";);
+    LLVM_DEBUG(dbgs() << "VCT: vectorSize is not 2, 4, or 8\n";);
     return;
   }
 
   for (int i = 0; i < vectorSize; i++)
     if (Offsets[i] != i) {
-      LLVM_DEBUG(dbgs() << "VCT: offsets are not in order";);
+      LLVM_DEBUG(dbgs() << "VCT: offsets are not in order\n";);
       return;
     }
 
@@ -244,7 +244,7 @@ void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVec
       VectInsts[i]->eraseFromParent();
   }
 
-  LLVM_DEBUG(dbgs() << "VCT: vectorize done";);
+  LLVM_DEBUG(dbgs() << "VCT: vectorize done\n";);
 }
 
 void VectorizePass::declareFunctions(Module &M) {
