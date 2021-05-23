@@ -10,7 +10,7 @@ using namespace llvm;
 using namespace team2_pass;
 
 // consider outlining when the IR-reg count goes over this value
-#define THRESHOLD_REGNO 20
+#define THRESHOLD_REGNO 30
 
 namespace team2_pass {
 // store <BasicBlock, reg count> pair
@@ -97,19 +97,19 @@ PreservedAnalyses IROutlinerPass::run(Module &M, ModuleAnalysisManager &MAM) {
             visit.clear();
             // move to the instruction that exactly hits the threshold
             unsigned step = p.second - THRESHOLD_REGNO;
-            BasicBlock::iterator it;
-            for(auto itr=blockToSplit->end(), start=blockToSplit->begin();
-                itr!=start && step > 0; itr--){
-                    it = itr;
+            BasicBlock::iterator it = blockToSplit->end();
+            for(auto start=blockToSplit->begin();
+                it!=start && step > 0; it--){
                     step--;
             }
-            // outs() << it->getName() << '\n';
+            if(it == blockToSplit->end()) it--;
             // from that instruction, test each instruction with domReachNoLoop
             for(auto end=blockToSplit->end(); it!=end; it++){
                 Instruction *I = &*it;
+                if(I->getType()->isVoidTy()) continue;
+
                 Value *V = dyn_cast<Value>(I);
-                // outs() << I->getName() << '\n';
-                if(isa<PHINode>(*I)) continue;
+                // outs() << "Check " << I->getName() << '\n';
                 if(domReachNoLoop(I, blockToSplit, DT)){
                     // split here
                     splitAt = I;
@@ -138,6 +138,6 @@ PreservedAnalyses IROutlinerPass::run(Module &M, ModuleAnalysisManager &MAM) {
 
         }
     }
-    return PreservedAnalyses::all();
+    return PreservedAnalyses::none();
 }
 }
