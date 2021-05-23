@@ -88,7 +88,7 @@ PreservedAnalyses IROutlinerPass::run(Module &M, ModuleAnalysisManager &MAM) {
         for(auto p : blockRegCnt){
             // outs() << p.first->getName() << "\t\t" << p.second << '\n';
             if(p.second < THRESHOLD_REGNO){
-                outs() << "Not over threshold\n";
+                // outs() << "Not over threshold\n";
                 continue;
             }
             // find a block that crosses the threshold count
