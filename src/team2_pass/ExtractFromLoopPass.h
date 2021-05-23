@@ -29,7 +29,7 @@ class ExtractFromLoopPass : public PassInfoMixin<ExtractFromLoopPass> {
 public:
     PreservedAnalyses run(Function &, FunctionAnalysisManager &);
 private:
- void extractFromLoop(Loop *loop);
+ void extractFromLoop(Loop *loop, DominatorTree &DT);
 };
 }
 

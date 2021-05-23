@@ -12,98 +12,83 @@ namespace backend {
 
 PreservedAnalyses ExtractFromLoopPass::run(Function &F, FunctionAnalysisManager &FAM) {
  auto &LoopInfo = FAM.getResult<LoopAnalysis>(F);
+ DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
   for(auto &L : LoopInfo) {
-    extractFromLoop(L);
+    extractFromLoop(L, DT);
   }
 
   return PreservedAnalyses::all();
 }
 
- void ExtractFromLoopPass::extractFromLoop(Loop *L) {
-auto v = L->getSubLoops();
-if (v.size() > 0) {
-  // outs() << "loop has sub: " << v.size() << "\n";
+ void ExtractFromLoopPass::extractFromLoop(Loop *L, DominatorTree &DT) {
+  auto v = L->getSubLoops();
   for (auto sL : v) {
-    extractFromLoop(sL);
+    extractFromLoop(sL, DT);
   }
-  return;
-}
-
 
   BasicBlock *Preheader = L->getLoopPreheader();
     if(!Preheader) return;
     int cnt =0;
-    outs() << "Pre: " << Preheader->getName() << "\n";
-    for (auto &I : *Preheader) {
-      outs() << I << "\n";
-    }
-    
 
     for(auto *BB : L->getBlocks()) {
-      outs() << "Block: " << BB->getName() << "\n";
       for (auto &I : *BB) {
-        outs() << "  " << I << "\n";
-        auto LI = &I;
         if(auto LI = dyn_cast<LoadInst>(&I)){
-          int updatedInLoop = 0;
-          auto *loadedFrom = LI->getOperand(0);
-          outs() << "-- It is Load!!\n";
-           if(!(L->hasLoopInvariantOperands(LI))) {
+          // handle only when address is loop invariant
+          if(!(L->hasLoopInvariantOperands(LI))) {
              continue;
            }
-             outs() << "--loop invariant\n";
+          int loadCnt = 0, storeCnt = 0;
+          // for store instruction with same address
+          StoreInst *SI = NULL;
+          auto *loadedFrom = LI->getOperand(0);
           for (auto *BB2: L->getBlocks()) {
             for (auto &I2 : *BB2) {
-              if(auto *SI = dyn_cast<StoreInst>(&I2)) {
-                  if(SI->getOperand(1) == loadedFrom) {
-                    updatedInLoop++;
-                    outs() << "--updated at: " << I2 << "\n";
-                  }
-                }
+              auto *TmpI = dyn_cast<StoreInst>(&I2);
+              if (TmpI && TmpI->getOperand(1) == loadedFrom) {
+                storeCnt++;
+                SI = TmpI;
               }
+              auto *TmpI2 = dyn_cast<LoadInst>(&I2);
+              if (TmpI2 && TmpI2->getOperand(0) == loadedFrom) {
+                loadCnt++;
+              }
+            }
           }
-          if (!updatedInLoop) {
-            outs() << "  " << *LI << "\n";
-            outs() << "--not updated in loop!\n";
-            Instruction *InsertPtr;
-            InsertPtr = Preheader->getTerminator();
-            LI->moveBefore(InsertPtr);
+          // if no store instruction with same address in loop, extract load instruction
+          if (storeCnt == 0) {
+            LI->moveBefore(Preheader->getTerminator());
             return;
-          } else {
-            auto *BBLatch = L->getLoopLatch();
-            auto *BBHeader = L->getHeader();
-            // not header && not latch
-            if (BBLatch && BB != BBLatch && BB != BBHeader) {
-              outs() << "header: " << *BBHeader << "\n";
-              outs() << "latch: " << *BBLatch << "\n";
-              if (updatedInLoop == 1) {
-                for (auto &I2 : *BB) {
-                  if(auto *SI = dyn_cast<StoreInst>(&I2)) {
-                    if(SI->getOperand(1) == loadedFrom) {
-                      PHINode *phi = PHINode::Create(SI->getOperand(0)->getType(), 2, "name" + to_string(cnt++), BBHeader->getFirstNonPHI());
-                      outs() << *SI->getOperand(0) << "\n";
-                      Instruction *InsertPtr;
-                      InsertPtr = Preheader->getTerminator();
-                      LI->moveBefore(InsertPtr);
-                      // phi->addIncoming(ConstantInt::get(SI->getOperand(0)->getType(), 0), Preheader);
-                      LI->replaceAllUsesWith(phi);
-                      // phi->addIncoming(ConstantInt::get(SI->getOperand(0)->getType(), 0), BBLatch);
-                      phi->addIncoming(LI, Preheader);
-                      phi->addIncoming(SI->getOperand(0), BBLatch);
-                      outs() << "phi: " << *phi << "\n";
-                      // phi->insertBefore(BBHeader->getFirstNonPHI());
-                        SmallVector<std::pair<BasicBlock *, BasicBlock *> > ExitEdges;
-                      L->getExitEdges(ExitEdges);
-                      for (auto Edge : ExitEdges) {
-                        auto* BBExited = Edge.second;
-                        SI->moveBefore(BBExited->getFirstNonPHI());
-                        SI->setOperand(0, phi);
-                      }
-                      return;
-                    }
-                  }
-                }
+          } // if there is 1 load/store to loop invariant address, check for move
+          else if (storeCnt == 1 && loadCnt == 1) {
+            bool applyLoopExtract = true;
+            if (!DT.dominates(LI, SI)) {
+              applyLoopExtract = false;
+            }
+            if (LI->getType() != SI->getOperand(0)->getType()) {
+              applyLoopExtract = false;
+            }
+            SmallVector<BasicBlock *> Latches;
+            L->getLoopLatches(Latches);
+            Instruction *InstTobeStored = dyn_cast<Instruction>(SI->getOperand(0));
+            // check if inst tobe stored dominates all backedges
+            for (auto *Latch : Latches) {
+              if(!(DT.dominates(InstTobeStored, Latch) || InstTobeStored->getParent() == Latch)) {
+                applyLoopExtract = false;
               }
+            }
+            if (applyLoopExtract) {
+              auto *BBHeader = L->getHeader();
+              PHINode *phi = PHINode::Create(LI->getType(), 1 + L->getNumBackEdges(),
+                    "extract.loop" + to_string(cnt++), BBHeader->getFirstNonPHI());
+              // move load instruction to the end of preheader block
+              LI->moveBefore(Preheader->getTerminator());
+              LI->replaceAllUsesWith(phi);
+              // construct phinode
+              phi->addIncoming(LI, Preheader);
+              for (auto *Latch : Latches) {
+                phi->addIncoming(SI->getOperand(0), Latch);
+              }
+              return;
             }
           }
         }
