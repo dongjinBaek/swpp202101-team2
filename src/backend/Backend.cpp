@@ -573,13 +573,34 @@ SymbolMap::SymbolMap(Module* M, TargetMachine& TM, RegisterGraph& RG) : M(M), TM
   }
 
   //Assign registers for Global variables
-  unsigned acc = 0; //accumulated offset from the gvp pointer
-  for(Value& gv : M->globals()) {
-    if(!isa<GlobalVariable>(gv) || gv.getName().contains('$')) continue;
+  unsigned stack_acc = 0, heap_acc = 0; //accumulated offset from the gvp pointer
+  Module::global_iterator it;
+
+  for (it = M->global_begin(); it != M->global_end(); it++) {
+    Value& gv = *it;
+    if (!isa<GlobalVariable>(gv) || gv.getName().contains('$')) continue;
     unsigned size = getAccessSize(dyn_cast<GlobalVariable>(&gv)->getValueType());
-    Memory* gvaddr = new Memory(TM.gvp(), acc);
+    size = (size + 7) / 8 * 8;
+    if (stack_acc + size > MAX_STACK_SIZE) break;
+    stack_acc += size;
+  }
+  for (auto it2 = M->global_begin(); it2 != it; it2++) {
+    Value& gv = *it2;
+    if (!isa<GlobalVariable>(gv) || gv.getName().contains('$')) continue;
+    unsigned size = getAccessSize(dyn_cast<GlobalVariable>(&gv)->getValueType());
+    size = (size + 7) / 8 * 8;
+    Memory* gvaddr = new Memory(TM.sgvp(), stack_acc);
     symbolTable[&gv] = gvaddr;
-    acc += (size+7) / 8 * 8;
+    stack_acc -= size;
+  }
+  for (auto it2 = it; it2 != M->global_end(); it2++) {
+    Value& gv = *it2;
+    if (!isa<GlobalVariable>(gv) || gv.getName().contains('$')) continue;
+    unsigned size = getAccessSize(dyn_cast<GlobalVariable>(&gv)->getValueType());
+    size = (size + 7) / 8 * 8;
+    Memory* gvaddr = new Memory(TM.gvp(), heap_acc);
+    symbolTable[&gv] = gvaddr;
+    heap_acc += size;
   }
 }
 
