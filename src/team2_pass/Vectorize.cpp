@@ -237,7 +237,7 @@ void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVec
     CallInst *CVStore = CallInst::Create(VStores[vectorSize], ArrayRef<Value *>(Args, vectorSize + 2));
     CVStore->insertAfter(InsertAfter);
   }
-  
+
   for (int i = 0; i < vectorSize; i++)
       VectInsts[i]->eraseFromParent();
 

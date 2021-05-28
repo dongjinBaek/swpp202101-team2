@@ -32,6 +32,7 @@ typedef struct {
 class VectorizePass : public PassInfoMixin<VectorizePass> {
 public:
     PreservedAnalyses run(Module &, ModuleAnalysisManager &);
+    static Difference getDifference(Value *V1, Value *V2);
     
 private:
     Type *VoidTy;
@@ -43,7 +44,6 @@ private:
     map<int, FunctionCallee> ExtractElements;
 
     void Vectorize(SmallVector<Instruction *, 8> &, SmallVector<int, 8> &, bool);
-    Difference getDifference(Value *V1, Value *V2);
     Instruction *findNextBaseInstruction(Instruction *I);
     void runOnBasicBlock(BasicBlock &BB);
     void declareFunctions(Module &M);
