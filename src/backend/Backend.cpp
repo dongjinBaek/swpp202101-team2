@@ -576,6 +576,7 @@ SymbolMap::SymbolMap(Module* M, TargetMachine& TM, RegisterGraph& RG) : M(M), TM
   unsigned stack_acc = 0, heap_acc = 0; //accumulated offset from the gvp pointer
   Module::global_iterator it;
 
+  // find separating point between GVs in stack and heap
   for (it = M->global_begin(); it != M->global_end(); it++) {
     Value& gv = *it;
     if (!isa<GlobalVariable>(gv) || gv.getName().contains('$')) continue;
@@ -584,6 +585,7 @@ SymbolMap::SymbolMap(Module* M, TargetMachine& TM, RegisterGraph& RG) : M(M), TM
     if (stack_acc + size > MAX_STACK_SIZE) break;
     stack_acc += size;
   }
+  // calculating offset of GVs in stack with TM.sgvp support
   for (auto it2 = M->global_begin(); it2 != it; it2++) {
     Value& gv = *it2;
     if (!isa<GlobalVariable>(gv) || gv.getName().contains('$')) continue;
@@ -593,6 +595,7 @@ SymbolMap::SymbolMap(Module* M, TargetMachine& TM, RegisterGraph& RG) : M(M), TM
     symbolTable[&gv] = gvaddr;
     stack_acc -= size;
   }
+  // calculating offset of GVs in heap
   for (auto it2 = it; it2 != M->global_end(); it2++) {
     Value& gv = *it2;
     if (!isa<GlobalVariable>(gv) || gv.getName().contains('$')) continue;

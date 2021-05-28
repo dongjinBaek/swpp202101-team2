@@ -90,7 +90,8 @@ public:
   Register* sp();
   Register* gvp();
   Register* fakeReg();
-  Register* sgvp();
+  Register* sgvp(); // stack global variable pointer
+  // gvp: 204800 + offset, sgvp: 102400 - offset
 
   unsigned regNo(Symbol*);
   unsigned argNo(Symbol*);

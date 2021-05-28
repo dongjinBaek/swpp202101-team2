@@ -72,6 +72,7 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
             Module *M = BB.getModule();
             unsigned stack_acc = 0;
 
+            // find separting point between global variables in stack and heap
             for (it = M->global_begin(); it != M->global_end(); it++) {
                 GlobalVariable& gv = *it;
                 if (gv.getName().contains('$')) continue;
@@ -80,8 +81,11 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
                 stack_acc += size;
             }
             
-            *fout << emitInst({"sp = sub sp", to_string(stack_acc), "64"});
+            // securing stack space
+            if (stack_acc)
+                *fout << emitInst({"sp = sub sp", to_string(stack_acc), "64"});
             
+            // initialize GV in stack
             for (auto it2 = M->global_begin(); it2 != it; it2++) {
                 GlobalVariable& gv = *it2;
                 if (gv.getName().contains('$')) continue;
@@ -93,6 +97,7 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
                 stack_acc -= size;
             }
 
+            // securing heap space + initialize GV in heap
             for(auto it2 = it; it2 != M->global_end(); it2++) {
                 GlobalVariable& gv = *it2;
                 if (gv.getName().contains('$')) continue;
@@ -140,7 +145,7 @@ void AssemblyEmitter::visitLoadInst(LoadInst& I) {
             *fout << emitInst({name(&I), "= load", size, "204800", to_string(mem->getOffset())});
         }
         else if (mem->getBase() == TM->sgvp())
-            *fout << emitInst({name(&I), "= load", size, to_string(102400 -mem->getOffset()), "0"});
+            *fout << emitInst({name(&I), "= load", size, to_string(102400 - mem->getOffset()), "0"});
         else assert(false && "base of memory pointers should be sp or gvp");
     }
     //else a pointer stored in register,
@@ -273,6 +278,7 @@ void AssemblyEmitter::visitCallInst(CallInst& I) {
         string name0 = name(I.getArgOperand(0)), name1 = name(I.getArgOperand(1));
         static unsigned int num = 0;
         string str = to_string(num++);
+        // allocate on stack when sp - name0 >= stack_lower_bound
         string stack_lower_bound = to_string(102400 - MAX_STACK_SIZE);
         *fout << emitInst({name1, "= add", name0, stack_lower_bound, "64"});
         *fout << emitInst({name1, "= icmp ult sp", name1, "64"});
