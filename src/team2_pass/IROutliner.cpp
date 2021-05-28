@@ -22,7 +22,6 @@ vector<Value *> IROutlinerPass::prevValues;
 
 // fill the blockRegCnt vector by DFS toward successors
 void IROutlinerPass::countRegs(BasicBlock *BB, unsigned predCnt){
-
     for(auto p : blockRegCnt)
         if(p.first == BB) return;   // loop; backtrack
     unsigned cnt = predCnt;
@@ -39,7 +38,6 @@ void IROutlinerPass::countRegs(BasicBlock *BB, unsigned predCnt){
 
 // recursively check whether I dominates BB and all blocks reachable by it
 bool IROutlinerPass::domReachNoLoop(Instruction *I, BasicBlock *BB, DominatorTree &DT){
-
     if(find(visit.begin(), visit.end(), BB) != visit.end())
         return false;   // loop
     if(!DT.dominates(I, BB) && !(I->getParent()==BB))
@@ -69,7 +67,6 @@ PreservedAnalyses IROutlinerPass::run(Module &M, ModuleAnalysisManager &MAM) {
 
     // this loop must be fixed when this code becomes able to create new function
     for (auto &F : M) {
-
         // outs() << "==" << F.getName() << '\n';
 
         // skip empty function
@@ -99,9 +96,7 @@ PreservedAnalyses IROutlinerPass::run(Module &M, ModuleAnalysisManager &MAM) {
             unsigned step = p.second - THRESHOLD_REGNO;
             BasicBlock::iterator it = blockToSplit->end();
             for(auto start=blockToSplit->begin();
-                it!=start && step > 0; it--){
-                    step--;
-            }
+                it!=start && step > 0; it--, step--);
             if(it == blockToSplit->end()) it--;
             // from that instruction, test each instruction with domReachNoLoop
             for(auto end=blockToSplit->end(); it!=end; it++){
@@ -113,8 +108,8 @@ PreservedAnalyses IROutlinerPass::run(Module &M, ModuleAnalysisManager &MAM) {
                 if(domReachNoLoop(I, blockToSplit, DT)){
                     // split here
                     splitAt = I;
-                    // outs() << "Split point: ";
-                    // outs() << I->getName() << '\n';
+                    outs() << "Split point: ";
+                    outs() << I->getName() << '\n';
                     split = true;
                     break;
                 }
@@ -133,8 +128,8 @@ PreservedAnalyses IROutlinerPass::run(Module &M, ModuleAnalysisManager &MAM) {
             for(auto *pred : predecessors(blockToSplit))
                 gatherPrevValues(pred);
 
-            // for(auto *V : prevValues)
-            //     outs() << V->getNameOrAsOperand() << '\n';
+            for(auto *V : prevValues)
+                outs() << V->getNameOrAsOperand() << '\n';
 
         }
     }
