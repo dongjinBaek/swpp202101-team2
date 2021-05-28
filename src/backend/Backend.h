@@ -27,7 +27,7 @@ namespace backend {
 class Memory;
 class Register;
 
-static const unsigned MAX_STACK_SIZE = 76800;
+static const unsigned MAX_STACK_SIZE = 51200;
 
 class Symbol{
 protected:
