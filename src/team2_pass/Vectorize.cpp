@@ -73,7 +73,7 @@ Difference VectorizePass::getDifference(Value *V1, Value *V2) {
     if (GEP1 && GEP1->getNumOperands() == 2) {
       Value *OP1 = GEP1->getOperand(0);
       ConstantInt *OP2 = dyn_cast<ConstantInt>(GEP1->getOperand(1));
-      if (V1 == V2) return {true, sign * OP2->getSExtValue()};
+      if (OP2 && OP1 == V2) return {true, sign * OP2->getSExtValue()};
     }
     swap(V1, V2);
     swap(BO1, BO2);
@@ -108,7 +108,7 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
     // loop until vectorize condition is met, or end of basicblock
     Instruction *CurI = BaseI->getNextNonDebugInstruction();
     for (; CurI; CurI = CurI->getNextNonDebugInstruction()) {
-      if (VectInsts.size() > 8) {
+      if (VectInsts.size() >= 8) {
         NextBaseI = findNextBaseInstruction(CurI);
         break;
       }
