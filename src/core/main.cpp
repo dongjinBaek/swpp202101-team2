@@ -90,6 +90,7 @@ int main(int argc, char *argv[]) {
   // execute IR passes
   LoopPassManager LPM;
   LoopPassManager LPM2;
+  LoopPassManager LPM3;
   FunctionPassManager FPM;
   ModulePassManager MPM;
   CGSCCPassManager CPM;
@@ -136,11 +137,11 @@ int main(int argc, char *argv[]) {
     // loop passes
     MPM.addPass(RemoveLoopMetadataPass());
     
-    LPM.addPass(LoopInstSimplifyPass());
-    LPM.addPass(LoopSimplifyCFGPass());
-    LPM.addPass(LoopRotatePass());
+    LPM3.addPass(LoopInstSimplifyPass());
+    LPM3.addPass(LoopSimplifyCFGPass());
+    LPM3.addPass(LoopRotatePass());
 
-    FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM)));
+    FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM3)));
     FPM.addPass(LoopUnrollPass(LoopUnrollOptions().setPartial(true)
                                                   .setPeeling(true)
                                                   .setProfileBasedPeeling(true)
