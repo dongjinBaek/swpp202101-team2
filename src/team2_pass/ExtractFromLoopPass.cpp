@@ -17,7 +17,7 @@ PreservedAnalyses ExtractFromLoopPass::run(Function &F, FunctionAnalysisManager 
     extractFromLoop(L, DT);
   }
 
-  return PreservedAnalyses::all();
+  return PreservedAnalyses::none();
 }
 
  void ExtractFromLoopPass::extractFromLoop(Loop *L, DominatorTree &DT) {
