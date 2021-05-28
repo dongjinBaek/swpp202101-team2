@@ -40,16 +40,16 @@ PreservedAnalyses ExtractFromLoopPass::run(Function &F, FunctionAnalysisManager 
           int loadCnt = 0, storeCnt = 0;
           // for store instruction with same address
           StoreInst *SI = NULL;
-          auto *loadedFrom = LI->getOperand(0);
+          auto *LoadedFrom = LI->getOperand(0);
           for (auto *BB2: L->getBlocks()) {
             for (auto &I2 : *BB2) {
               auto *TmpI = dyn_cast<StoreInst>(&I2);
-              if (TmpI && TmpI->getOperand(1) == loadedFrom) {
+              if (TmpI && TmpI->getOperand(1) == LoadedFrom) {
                 storeCnt++;
                 SI = TmpI;
               }
               auto *TmpI2 = dyn_cast<LoadInst>(&I2);
-              if (TmpI2 && TmpI2->getOperand(0) == loadedFrom) {
+              if (TmpI2 && TmpI2->getOperand(0) == LoadedFrom) {
                 loadCnt++;
               }
             }
