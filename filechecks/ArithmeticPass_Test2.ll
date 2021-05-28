@@ -1,3 +1,7 @@
+; It checks for both ArithmeticPass and GVMalloc2Alloca backend supports.
+; GV @A goes to stack, @B and @C to heap.
+; ArithmeticPass removes redundant instructions like "%1 = mul i64 2400, 8".
+
 @A = global [6400 x i64] zeroinitializer, align 16
 @B = global [6400 x i64] zeroinitializer, align 16
 @C = global [6400 x i64] zeroinitializer, align 16
