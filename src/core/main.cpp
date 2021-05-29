@@ -147,10 +147,14 @@ int main(int argc, char *argv[]) {
   }
   
   if (shouldUsePass("ExtractFromLoopPass")) {    
+    FunctionPassManager FPM;
+
     FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LICMPass())));
     FPM.addPass(ExtractFromLoopPass());
     FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LICMPass())));
     FPM.addPass(ExtractFromLoopPass());
+
+    MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   }
   
   if (shouldUsePass("CondBranchDeflationPass")) {
