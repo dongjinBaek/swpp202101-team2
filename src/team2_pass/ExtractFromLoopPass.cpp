@@ -1,5 +1,8 @@
 /*
-    ExtractFromLoopPass
+    ExtractFromLoopPass - extract loop invariant load instructions in some cases.
+    1. there is no store instruction to same address in loop (LICM also does this, but not to global variables)
+    2. there is 1 store instruction to same address in loop, and all backedges are dominated by store,
+    extract load instruction and make a phi node at start of the loop.
 */
 
 #include "ExtractFromLoopPass.h"
