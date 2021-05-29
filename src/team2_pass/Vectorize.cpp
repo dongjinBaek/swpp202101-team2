@@ -176,9 +176,14 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
 Instruction *VectorizePass::findNextBaseInstruction(Instruction *I) {
   Instruction *NextBaseI = nullptr;
   for (; I; I = I->getNextNonDebugInstruction()) {
-    if (isa<LoadInst>(I) || isa<StoreInst>(I)) {
-      NextBaseI = I;
-      break;
+    LoadInst *LI = dyn_cast<LoadInst>(I);
+    StoreInst *SI = dyn_cast<StoreInst>(I);
+    if (LI || SI) {
+      Type *PointerType = LI ? LI->getPointerOperandType() : SI->getPointerOperandType();
+      if (PointerType == Int64PtrTy) {
+        NextBaseI = I;
+        break;
+      }
     }
   }
   return NextBaseI;
@@ -233,8 +238,8 @@ void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVec
     }
     Args[vectorSize] = Pointer;
     Args[vectorSize + 1] = ConstantInt::get(Int64Ty, (1 << vectorSize) - 1);
-
     CallInst *CVStore = CallInst::Create(VStores[vectorSize], ArrayRef<Value *>(Args, vectorSize + 2));
+
     CVStore->insertAfter(InsertAfter);
   }
 
