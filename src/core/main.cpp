@@ -10,6 +10,7 @@
 #include "../team2_pass/ArithmeticPass.h"
 #include "../team2_pass/IntegerEqPropagation.h"
 #include "../team2_pass/Malloc2DynAlloca.h"
+#include "../team2_pass/IROutliner.h"
 
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
@@ -149,6 +150,10 @@ int main(int argc, char *argv[]) {
     FPM.addPass(GVN());
     FPM.addPass(ArithmeticPass());
     FPM.addPass(SimplifyCFGPass());
+  }
+
+  if (shouldUsePass("IROutlinerPass")) {
+    MPM.addPass(IROutlinerPass());
   }
   
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
