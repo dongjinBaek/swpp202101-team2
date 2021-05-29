@@ -25,15 +25,14 @@ define i32 @main() #4 {
 ; CHECK: start main 0
 entry:
 ; CHECK: .entry:
-; CHECK-NEXT: ; Init global variables
-; CHECK-NEXT: ; Init stack pointer
   %temp = alloca [256 x i64], align 16
-; CHECK-NEXT: sp = sub sp 2048 64
+; CHECK: sp = sub sp 2048 64
 ; CHECK-NEXT: r32 = mul sp 1 64
   %call = call i64 @read()
 ; CHECK-NEXT: r[[#R4:]] = call read
   %call1 = call i8* @malloc(i64 %call)
-; CHECK-NEXT: r[[#R5:]] = icmp ult sp r[[#R4]] 64
+; CHECK-NEXT: r[[#R14:]] = add r[[#R4]] [[#X:]] 64
+; CHECK-NEXT: r[[#R5:]] = icmp ult sp r[[#R14]] 64
 ; CHECK-NEXT: br r[[#R5]] .__sp.then[[#]] .__sp.else[[#]]
 ; CHECK: .__sp.then[[#]]:
 ; CHECK-NEXT: r[[#R6:]] = malloc r[[#R4]]
