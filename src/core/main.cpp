@@ -12,6 +12,8 @@
 #include "../team2_pass/Malloc2DynAlloca.h"
 #include "../team2_pass/RemoveLoopMetadata.h"
 #include "../team2_pass/Vectorize.h"
+#include "../team2_pass/ExtractFromLoopPass.h"
+#include "../team2_pass/IROutliner.h"
 
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
@@ -34,6 +36,7 @@
 #include "llvm/Transforms/Scalar/LoopRotation.h"
 #include "llvm/Transforms/Scalar/LoopSimplifyCFG.h"
 #include "llvm/Transforms/Scalar/LoopUnrollPass.h"
+#include "llvm/Transforms/Scalar/LICM.h"
 
 #include <string>
 
@@ -112,13 +115,12 @@ int main(int argc, char *argv[]) {
     CPM.addPass(InlinerPass());
     MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(std::move(CPM)));
   }
+  
   if (shouldUsePass("Malloc2DynAllocaPass")) {
-    // malloc 2 alloca passes
     MPM.addPass(Malloc2DynAllocaPass());
   }
   
   if (shouldUsePass("LoopUnrollPass") || shouldUsePass("VectorizePass")) {
-    // loop passes
     LoopPassManager LPM1;
     FunctionPassManager FPM1;
 
@@ -140,18 +142,22 @@ int main(int argc, char *argv[]) {
   }
 
   if (shouldUsePass("VectorizePass")) {
-    // vectorize passes
     MPM.addPass(VectorizePass());
     MPM.addPass(createModuleToFunctionPassAdaptor(InstCombinePass()));
   }
   
+  if (shouldUsePass("ExtractFromLoopPass")) {    
+    FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LICMPass())));
+    FPM.addPass(ExtractFromLoopPass());
+    FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LICMPass())));
+    FPM.addPass(ExtractFromLoopPass());
+  }
+  
   if (shouldUsePass("CondBranchDeflationPass")) {
-    // cond branch pass
     MPM.addPass(CondBranchDeflationPass());
   }
 
   if (shouldUsePass("ArithmeticPass")) {
-    // arithmetic passes
     FunctionPassManager FPM2;
 
     FPM2.addPass(GVN());
@@ -161,6 +167,10 @@ int main(int argc, char *argv[]) {
     FPM2.addPass(SimplifyCFGPass());
     
     MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM2)));
+  }
+
+  if (shouldUsePass("IROutlinerPass")) {
+    MPM.addPass(IROutlinerPass());
   }
   
   MPM.run(*M, MAM);
