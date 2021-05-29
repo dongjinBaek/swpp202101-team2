@@ -47,13 +47,27 @@ PreservedAnalyses GEPUnpackPass::run(Module &M, ModuleAnalysisManager &MAM) {
       v.push_back(pti);
       for (auto opIt = GI->idx_begin(); opIt != GI->idx_end(); ++opIt) {
         Value *op = *opIt;
+        ConstantInt *CI = dyn_cast<ConstantInt>(op);
         unsigned size = getAccessSize(curr);
-        Instruction *mul = BinaryOperator::CreateMul(
-            op, ConstantInt::get(IntegerType::getInt64Ty(Context), size, true));
-        mul->insertBefore(&I);
-        Instruction *add = BinaryOperator::CreateAdd(v.back(), mul);
-        v.push_back(add);
-        add->insertBefore(&I);
+        // acc + 0 * size -> acc, acc + const * size -> acc + const
+        if (CI) {
+          if (!CI->isZero()) {
+            uint64_t offset = CI->getZExtValue();
+            Instruction *add = BinaryOperator::CreateAdd(v.back(),
+              ConstantInt::get(IntegerType::getInt64Ty(Context),
+              offset * size, true));
+            v.push_back(add);
+            add->insertBefore(&I);
+          }
+        }
+        else {
+          Instruction *mul = BinaryOperator::CreateMul(
+              op, ConstantInt::get(IntegerType::getInt64Ty(Context), size, true));
+          mul->insertBefore(&I);
+          Instruction *add = BinaryOperator::CreateAdd(v.back(), mul);
+          v.push_back(add);
+          add->insertBefore(&I);
+        }
         if (curr->isArrayTy()) curr = curr->getArrayElementType();
       }
 
