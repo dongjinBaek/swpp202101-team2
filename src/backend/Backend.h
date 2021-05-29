@@ -27,6 +27,8 @@ namespace backend {
 class Memory;
 class Register;
 
+static const unsigned MAX_STACK_SIZE = 51200;
+
 class Symbol{
 protected:
   string name;
@@ -79,6 +81,7 @@ class TargetMachine {
   Register* spreg;
   Register* gvpreg;
   Register* fakereg;
+  Register* sgvpreg;
 
 public:
   //Read-only getters for the register data stored in TargetMachine object.
@@ -87,6 +90,8 @@ public:
   Register* sp();
   Register* gvp();
   Register* fakeReg();
+  Register* sgvp(); // stack global variable pointer
+  // gvp: 204800 + offset, sgvp: 102400 - offset
 
   unsigned regNo(Symbol*);
   unsigned argNo(Symbol*);
