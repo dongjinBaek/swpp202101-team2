@@ -120,6 +120,17 @@ int main(int argc, char *argv[]) {
     MPM.addPass(Malloc2DynAllocaPass());
   }
   
+  if (shouldUsePass("ExtractFromLoopPass")) {
+    FunctionPassManager FPM;
+
+    FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LICMPass())));
+    FPM.addPass(ExtractFromLoopPass());
+    FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LICMPass())));
+    FPM.addPass(ExtractFromLoopPass());
+
+    MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+  }
+
   if (shouldUsePass("LoopUnrollPass") || shouldUsePass("VectorizePass")) {
     LoopPassManager LPM1;
     FunctionPassManager FPM1;
@@ -144,17 +155,6 @@ int main(int argc, char *argv[]) {
   if (shouldUsePass("VectorizePass")) {
     MPM.addPass(VectorizePass());
     MPM.addPass(createModuleToFunctionPassAdaptor(InstCombinePass()));
-  }
-  
-  if (shouldUsePass("ExtractFromLoopPass")) {    
-    FunctionPassManager FPM;
-
-    FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LICMPass())));
-    FPM.addPass(ExtractFromLoopPass());
-    FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LICMPass())));
-    FPM.addPass(ExtractFromLoopPass());
-
-    MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   }
   
   if (shouldUsePass("CondBranchDeflationPass")) {
