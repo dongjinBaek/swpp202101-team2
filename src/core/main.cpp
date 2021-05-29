@@ -117,11 +117,6 @@ int main(int argc, char *argv[]) {
     MPM.addPass(Malloc2DynAllocaPass());
   }
   
-  if (shouldUsePass("CondBranchDeflationPass")) {
-    // cond branch pass
-    MPM.addPass(CondBranchDeflationPass());
-  }
-  
   if (shouldUsePass("LoopUnrollPass") || shouldUsePass("VectorizePass")) {
     // loop passes
     LoopPassManager LPM1;
@@ -150,6 +145,11 @@ int main(int argc, char *argv[]) {
     MPM.addPass(createModuleToFunctionPassAdaptor(InstCombinePass()));
   }
   
+  if (shouldUsePass("CondBranchDeflationPass")) {
+    // cond branch pass
+    MPM.addPass(CondBranchDeflationPass());
+  }
+
   if (shouldUsePass("ArithmeticPass")) {
     // arithmetic passes
     FunctionPassManager FPM2;
