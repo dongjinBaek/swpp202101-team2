@@ -6,12 +6,13 @@
 */
 
 #include "ExtractFromLoopPass.h"
+#include "Vectorize.h"
 
 using namespace llvm;
 using namespace std;
 using namespace llvm::PatternMatch;
 
-namespace backend {
+namespace team2_pass {
 
 PreservedAnalyses ExtractFromLoopPass::run(Function &F, FunctionAnalysisManager &FAM) {
  auto &LoopInfo = FAM.getResult<LoopAnalysis>(F);
@@ -47,9 +48,16 @@ PreservedAnalyses ExtractFromLoopPass::run(Function &F, FunctionAnalysisManager 
         for (auto *BB2: L->getBlocks()) {
           for (auto &I2 : *BB2) {
             auto *TmpI = dyn_cast<StoreInst>(&I2);
-            if (TmpI && TmpI->getOperand(1) == LoadedFrom) {
-              storeCnt++;
-              SI = TmpI;
+            if (TmpI) {
+              Difference difference = VectorizePass::getDifference(TmpI->getOperand(1), LoadedFrom);
+              if (difference.known) {
+                if (difference.value == 0) {
+                  storeCnt++;
+                  SI = TmpI;
+                }
+              }
+              else
+                return;
             }
             auto *TmpI2 = dyn_cast<LoadInst>(&I2);
             if (TmpI2 && TmpI2->getOperand(0) == LoadedFrom) {
