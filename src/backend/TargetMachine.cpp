@@ -25,6 +25,9 @@ Register* TargetMachine::gvp() {
 Register* TargetMachine::fakeReg() {
     return fakereg;
 }
+Register* TargetMachine::sgvp() {
+    return sgvpreg;
+}
 unsigned TargetMachine::regNo(Symbol* symbol) {
     for(int i = 0; i < 32; i++) {
         if(symbol == regfile[i]) return i;
@@ -49,6 +52,7 @@ bool TargetMachine::valid(Symbol* symbol) {
             if(spreg == symbol) return true;
             if(gvpreg == symbol) return true;
             if(fakereg == symbol) return true;
+            if(sgvpreg == symbol) return true;
         }
         //Every implicit memory addresses are expressed as a base register(sp, gvp) and offset.
         else if(symbol->castToMemory()) {
@@ -68,6 +72,7 @@ TargetMachine::TargetMachine() {
     spreg = new Register("sp");
     gvpreg = new Register("gvp");
     fakereg = new Register("fake");
+    sgvpreg = new Register("sgvp");
 }
 
 //---------------------------------------------------------------
