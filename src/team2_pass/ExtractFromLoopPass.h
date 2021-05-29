@@ -24,7 +24,7 @@ using namespace std;
     ExtractFromLoopPass
 */
 
-namespace backend {
+namespace team2_pass {
 class ExtractFromLoopPass : public PassInfoMixin<ExtractFromLoopPass> {
 public:
     PreservedAnalyses run(Function &, FunctionAnalysisManager &);
