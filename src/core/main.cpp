@@ -176,7 +176,7 @@ int main(int argc, char *argv[]) {
   if (shouldUsePass("IROutlinerPass")) {
     MPM.addPass(IROutlinerPass());
   }
-  
+
   MPM.run(*M, MAM);
 
   SplitSelfLoopPass().run(*M, MAM);
