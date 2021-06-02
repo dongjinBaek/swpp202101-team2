@@ -206,6 +206,7 @@ void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVec
   );
 
   // sort in offset order, adjust offset
+  Instruction *InsertAfter = VectInsts.back();
   SmallVector<pair<int, Instruction *>, 8> OffsetInstPairs;
   for (int i = 0; i < vectorSize; i++) {
     OffsetInstPairs.push_back(make_pair(Offsets[i], VectInsts[i]));
@@ -238,7 +239,6 @@ void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVec
   }
 
   // make call instruction(s) and replace uses if needed
-  Instruction *InsertAfter = VectInsts.back();
   Value *Pointer = isLoad ? VectInsts[0]->getOperand(0) : VectInsts[0]->getOperand(1);
   if (isLoad) {
     Value *Args[] = {Pointer, ConstantInt::get(Int64Ty, mask)};
