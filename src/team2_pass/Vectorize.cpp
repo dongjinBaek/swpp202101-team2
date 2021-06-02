@@ -103,15 +103,17 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
                if (FirstUser) dbgs() << "  First User - " << *FirstUser << '\n';);
 
     SmallVector<Instruction *, 8> VectInsts;
-    SmallVector<int, 8> Offsets;
-    Offsets.push_back(0);
+    SmallVector<int, 8> VOffsets;     // offsets to vectorize
+    SmallVector<int> AOffsets;        // all offsets appeared
+    VOffsets.push_back(0);
+    AOffsets.push_back(0);
     VectInsts.push_back(BaseI);
 
     // loop until vectorize condition is met, or end of basicblock
     Instruction *CurI = BaseI->getNextNonDebugInstruction();
     for (; CurI; CurI = CurI->getNextNonDebugInstruction()) {
       if (VectInsts.size() >= 8) {
-        NextBaseI = findNextBaseInstruction(CurI);
+        NextBaseI = NextBaseI ? NextBaseI : findNextBaseInstruction(CurI);
         break;
       }
 
@@ -122,7 +124,7 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
       if (LI || SI) {
         Value *CurPointer = LI ? CurI->getOperand(0) : CurI->getOperand(1);
         Difference diff = getDifference(CurPointer, BasePointer);
-        bool offsetExist = find(Offsets.begin(), Offsets.end(), diff.value) != Offsets.end();
+        bool offsetExist = find(AOffsets.begin(), AOffsets.end(), diff.value) != AOffsets.end();
         LLVM_DEBUG(dbgs() << "  Inst: " << *CurI << ", known: " << diff.known << ", value: " 
                    << diff.value << "  offsetExist: " << offsetExist << "\n";);
 
@@ -131,25 +133,29 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
             FirstUser->getParent() == CurI->getParent() && 
             FirstUser->comesBefore(CurI)) {
           LLVM_DEBUG(dbgs() << "  CurI is after first user of BaseI" << "\n");
-          NextBaseI = CurI;
+          NextBaseI = NextBaseI ? NextBaseI : CurI;
           break;
         }
 
         // known-diff load/stores can be vectorized, except some case
         if (diff.known) {
           if (offsetExist) {
-            NextBaseI = CurI;
+            NextBaseI = NextBaseI ? NextBaseI : CurI;
             break;
           }
 
+          AOffsets.push_back(diff.value);
           if (isBaseLoad && LI || !isBaseLoad && SI) {
             VectInsts.push_back(CurI);
-            Offsets.push_back(diff.value);
+            VOffsets.push_back(diff.value);
+          }
+          else {
+            NextBaseI = NextBaseI ? NextBaseI : CurI;
           }
         }
         // unknown-diff load/stores stops vectorize
         else {
-          NextBaseI = CurI;
+          NextBaseI = NextBaseI ? NextBaseI : CurI;
           break;
         }
       }
@@ -160,13 +166,13 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
           continue;
         else {
           LLVM_DEBUG(dbgs() << *CI << " calls memory accessing function\n";);
-          NextBaseI = findNextBaseInstruction(CurI);
+          NextBaseI = NextBaseI ? NextBaseI : findNextBaseInstruction(CurI);
           break;
         }
       }
     }
     if (VectInsts.size() > 1) {
-      Vectorize(VectInsts, Offsets, isBaseLoad);
+      Vectorize(VectInsts, VOffsets, isBaseLoad);
     }
   }
 }
