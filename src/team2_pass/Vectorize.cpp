@@ -189,6 +189,10 @@ Instruction *VectorizePass::findNextBaseInstruction(Instruction *I) {
 }
 
 void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVector<int, 8> &Offsets, bool isLoad) {
+  int vectorSize = VectInsts.size();
+
+  assert (vectorSize == Offsets.size() && "Offset size should match VectInst size");
+  assert (vectorSize >= 2 && vectorSize <= 8 && "VectInst size range is 2 <= size <= 8");
   LLVM_DEBUG(
     dbgs() << "VCT: Instructions to vectorize - \n";
     for (int i = 0; i < VectInsts.size(); i++) {
@@ -200,44 +204,70 @@ void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVec
     dbgs() << "\n";
     dbgs() << "\n";
   );
-  int vectorSize = VectInsts.size();
-  if (!(vectorSize == 2 || vectorSize == 4 || vectorSize == 8)) {
-    LLVM_DEBUG(dbgs() << "VCT: vectorSize is not 2, 4, or 8\n";);
-    return;
+
+  // sort in offset order, adjust offset
+  SmallVector<pair<int, Instruction *>, 8> OffsetInstPairs;
+  for (int i = 0; i < vectorSize; i++) {
+    OffsetInstPairs.push_back(make_pair(Offsets[i], VectInsts[i]));
+  }
+  sort(OffsetInstPairs);
+  int baseOffset = OffsetInstPairs[0].first;
+  for (int i = 0; i < vectorSize; i++) {
+    VectInsts[i] = OffsetInstPairs[i].second;
+    Offsets[i] = OffsetInstPairs[i].first - baseOffset;
   }
 
-  for (int i = 0; i < vectorSize; i++)
-    if (Offsets[i] != i) {
-      LLVM_DEBUG(dbgs() << "VCT: offsets are not in order\n";);
-      return;
+  // build mask
+  int offsetRange = Offsets[vectorSize-1] - Offsets[0];
+  int targetSize, mask;
+  int i_to_idx[8], mask_arr[8] = {1, 1, 1, 1, 1, 1, 1, 1};
+  assert (offsetRange < 8 && "Offsets should fit in 8 bytes to vectorize");
+  if (offsetRange == 1) targetSize = 2;
+  else if (offsetRange < 4) targetSize = 4;
+  else targetSize = 8;
+  mask = (1 << targetSize) - 1;
+  for (int i = 0, idx = 0; i < targetSize; i++) {
+    if (idx == vectorSize || Offsets[idx] != i) {
+      mask ^= 1 << i;
+      mask_arr[i] = 0;
     }
+    else {
+      i_to_idx[i] = idx;
+      idx++;
+    }
+  }
 
   // make call instruction(s) and replace uses if needed
   Instruction *InsertAfter = VectInsts.back();
   Value *Pointer = isLoad ? VectInsts[0]->getOperand(0) : VectInsts[0]->getOperand(1);
   if (isLoad) {
-    Value *Args[] = {Pointer, ConstantInt::get(Int64Ty, (1 << vectorSize) - 1)};
-    CallInst *CVLoad = CallInst::Create(VLoads[vectorSize], Args);
+    Value *Args[] = {Pointer, ConstantInt::get(Int64Ty, mask)};
+    CallInst *CVLoad = CallInst::Create(VLoads[targetSize], Args);
     CVLoad->insertAfter(InsertAfter);
 
     Instruction *LastInsert = CVLoad;
-    for (int i = 0; i < vectorSize; i++) {
-      Value *Args[] = {CVLoad, ConstantInt::get(Int64Ty, i)};
-      CallInst *CExtract = CallInst::Create(ExtractElements[vectorSize], Args);
-      CExtract->insertAfter(LastInsert);
-      LastInsert = CExtract;
+    for (int i = 0; i < targetSize; i++) {
+      if (mask_arr[i]) {
+        Value *Args[] = {CVLoad, ConstantInt::get(Int64Ty, i)};
+        CallInst *CExtract = CallInst::Create(ExtractElements[targetSize], Args);
+        CExtract->insertAfter(LastInsert);
+        LastInsert = CExtract;
 
-      VectInsts[i]->replaceAllUsesWith(CExtract);
+        VectInsts[i_to_idx[i]]->replaceAllUsesWith(CExtract);
+      }
     }
   }
   else {
-    Value *Args[vectorSize + 2];
-    for (int i = 0; i < vectorSize; i++) {
-      Args[i] = VectInsts[i]->getOperand(0);
+    Value *Args[targetSize + 2];
+    for (int i = 0; i < targetSize; i++) {
+      if (mask_arr[i])
+        Args[i] = VectInsts[i_to_idx[i]]->getOperand(0);
+      else
+        Args[i] = ConstantInt::get(Int64Ty, 0);
     }
-    Args[vectorSize] = Pointer;
-    Args[vectorSize + 1] = ConstantInt::get(Int64Ty, (1 << vectorSize) - 1);
-    CallInst *CVStore = CallInst::Create(VStores[vectorSize], ArrayRef<Value *>(Args, vectorSize + 2));
+    Args[targetSize] = Pointer;
+    Args[targetSize + 1] = ConstantInt::get(Int64Ty, mask);
+    CallInst *CVStore = CallInst::Create(VStores[targetSize], ArrayRef<Value *>(Args, targetSize + 2));
 
     CVStore->insertAfter(InsertAfter);
   }
