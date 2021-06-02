@@ -85,6 +85,8 @@ Difference VectorizePass::getDifference(Value *V1, Value *V2) {
 }
 
 void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
+  sinkAllLoadUsers(BB);
+
   Instruction *BaseI = nullptr;
   Instruction *NextBaseI = findNextBaseInstruction(BB.getFirstNonPHI());
 
@@ -154,10 +156,7 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
       // function call can access memory
       else if (CI) {
         Function *F = CI->getCalledFunction();
-        string Fname = F->getName().str();
-        bool writeOrRead = (Fname == "write" || Fname == "read");
-
-        if (isBaseLoad && F->onlyReadsMemory() || writeOrRead)
+        if (isBaseLoad && F->onlyReadsMemory() || !doesAccessMemory(CI))
           continue;
         else {
           LLVM_DEBUG(dbgs() << *CI << " calls memory accessing function\n";);
@@ -268,6 +267,109 @@ void VectorizePass::declareFunctions(Module &M) {
   VStores[2] = M.getOrInsertFunction("vstore2", VoidTy, Int64Ty, Int64Ty, Int64PtrTy, Int64Ty);
   VStores[4] = M.getOrInsertFunction("vstore4", VoidTy, Int64Ty, Int64Ty, Int64Ty, Int64Ty, Int64PtrTy, Int64Ty);
   VStores[8] = M.getOrInsertFunction("vstore8", VoidTy, Int64Ty, Int64Ty, Int64Ty, Int64Ty, Int64Ty, Int64Ty, Int64Ty, Int64Ty, Int64PtrTy, Int64Ty);
+}
+
+void VectorizePass::sinkAllLoadUsers(BasicBlock &BB) {
+  for (auto it = BB.begin(); it != BB.end(); it++) {
+    LoadInst *LI = dyn_cast<LoadInst>(&(*it));
+    if (!LI) continue;
+
+    // sinkRecursive(BB, LI);
+    vector<Instruction *> users;
+    for(auto it = LI->user_begin(); it != LI->user_end(); it++) {
+      Instruction *UserI = dyn_cast<Instruction>(*it);
+      if (UserI->getParent() == &BB)
+        users.push_back(UserI);
+    }
+
+    // iterate in reverse order to maintain their order
+    for(auto it = users.rbegin(); it != users.rend(); it++)
+      sinkRecursive(BB, *it);
+  }
+}
+
+// sink given instruction recursively in post-order
+void VectorizePass::sinkRecursive(BasicBlock &BB, Instruction *I) {
+  static set<Instruction *> sinked;
+  if (sinked.find(I) != sinked.end()) return;
+  else sinked.insert(I);
+
+  LLVM_DEBUG(dbgs() << "sinkRecursive: " << BB.getName() << " " << *I << "\n");
+  Instruction *MaxSinkI = BB.getTerminator();
+
+  // sink all children recursively
+  for (auto it = I->user_begin(); it != I->user_end(); it++) {
+    Instruction *UserI = dyn_cast<Instruction>(*it);
+
+    if (UserI->getParent() == &BB && I->comesBefore(UserI)) {
+      sinkRecursive(BB, UserI);
+      MaxSinkI = MaxSinkI->comesBefore(UserI) ? MaxSinkI : UserI;
+    }
+  }
+
+  // find where to sink current instruction if access memory
+  LoadInst *LI = dyn_cast<LoadInst>(I);
+  StoreInst *SI = dyn_cast<StoreInst>(I);
+  CallInst *CI = dyn_cast<CallInst>(I);
+
+  if (LI || SI || (CI && doesAccessMemory(CI))) {
+    // find next user
+    Instruction *NextUI = I->user_empty() ? nullptr : I->user_back();
+    if (NextUI && NextUI->getParent() == &BB)
+      MaxSinkI = MaxSinkI->comesBefore(NextUI) ? MaxSinkI : NextUI;
+
+    // find next unknown-difference or equal pointer memory access
+    Instruction *NextMI = findNextMemoryInstruction(I->getNextNonDebugInstruction());
+    while (NextMI) {
+      LoadInst *NLI = dyn_cast<LoadInst>(NextMI);
+      StoreInst *NSI = dyn_cast<StoreInst>(NextMI);
+      CallInst *NCI = dyn_cast<CallInst>(NextMI);
+
+      if (CI || NCI) break;   // memory accessing call -> unknown-difference
+
+      Value *CurP = LI ? I->getOperand(0) : I->getOperand(1);
+      Value *NextP = NLI ? NextMI->getOperand(0) : NextMI->getOperand(1);
+      Difference d = getDifference(CurP, NextP);
+
+      if (d.known && d.value == 0) break;
+      else if (!d.known) break;
+      else NextMI = findNextMemoryInstruction(NextMI->getNextNonDebugInstruction());
+    }
+    if (NextMI)
+      MaxSinkI = MaxSinkI->comesBefore(NextMI) ? MaxSinkI : NextMI;
+  }
+
+  // sink current instruction
+  I->moveBefore(MaxSinkI);
+}
+
+// find next load/store/call(except 'read' and 'write') instruction including I
+Instruction *VectorizePass::findNextMemoryInstruction(Instruction *I) {
+  Instruction *NextI = nullptr;
+  for (; I; I = I->getNextNonDebugInstruction()) {
+    LoadInst *LI = dyn_cast<LoadInst>(I);
+    StoreInst *SI = dyn_cast<StoreInst>(I);
+    CallInst *CI = dyn_cast<CallInst>(I);
+    if (LI || SI) {
+      NextI = I;
+      break;
+    }
+    if (CI) {
+      Function *F = CI->getCalledFunction();
+      if (doesAccessMemory(CI)) {
+        NextI = I;
+        break;
+      }
+    }
+  }
+  return NextI;
+}
+
+bool VectorizePass::doesAccessMemory(CallInst *CI) {
+  Function *F = CI->getCalledFunction();
+  string Fname = F->getName().str();
+  bool writeOrRead = Fname == "write" || Fname == "read";
+  return !(F->doesNotAccessMemory() || writeOrRead);
 }
 
 PreservedAnalyses VectorizePass::run(Module &M, ModuleAnalysisManager &MAM) {

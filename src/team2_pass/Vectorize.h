@@ -47,6 +47,10 @@ private:
     Instruction *findNextBaseInstruction(Instruction *I);
     void runOnBasicBlock(BasicBlock &BB);
     void declareFunctions(Module &M);
+    void sinkAllLoadUsers(BasicBlock &BB);
+    void sinkRecursive(BasicBlock &BB, Instruction *I);
+    Instruction *findNextMemoryInstruction(Instruction *I);
+    bool doesAccessMemory(CallInst *CI);
 };
 
 }
