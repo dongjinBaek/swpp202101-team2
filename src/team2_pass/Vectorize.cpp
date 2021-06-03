@@ -52,9 +52,15 @@ Difference VectorizePass::getDifference(Value *V1, Value *V2) {
   // gep
   GetElementPtrInst *GEP1 = dyn_cast<GetElementPtrInst>(V1);
   GetElementPtrInst *GEP2 = dyn_cast<GetElementPtrInst>(V2);
-  if (GEP1 && GEP2 && GEP1->getNumOperands() == 2 && GEP2->getNumOperands() == 2) {
-    if (GEP1->getOperand(0) == GEP2->getOperand(0)) {
+  if (GEP1 && GEP2) {
+    if (GEP1->getNumOperands() == 2 && GEP2->getNumOperands() == 2 &&
+        GEP1->getOperand(0) == GEP2->getOperand(0)) {
       return getDifference(GEP1->getOperand(1), GEP2->getOperand(1));
+    }
+    else if (GEP1->getNumOperands() == 3 && GEP2->getNumOperands() == 3 &&
+             GEP1->getOperand(0) == GEP2->getOperand(0) &&
+             GEP1->getOperand(1) == GEP2->getOperand(1)) {
+      return getDifference(GEP1->getOperand(2), GEP2->getOperand(2));
     }
   }
 
