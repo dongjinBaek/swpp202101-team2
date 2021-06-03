@@ -14,6 +14,8 @@
 #include "../team2_pass/Vectorize.h"
 #include "../team2_pass/ExtractFromLoopPass.h"
 #include "../team2_pass/IROutliner.h"
+#include "../team2_pass/AddNoRecurseAttrs.h"
+#include "../team2_pass/MallocInliner.h"
 
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
@@ -111,9 +113,11 @@ int main(int argc, char *argv[]) {
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-  if (shouldUsePass("InlinerPass")) {
-    CPM.addPass(InlinerPass());
+  if (shouldUsePass("MallocInlinerPass")) {
+    //CPM.addPass(InlinerPass());
+    CPM.addPass(AddNoRecurseAttrsPass()); // to use F.doesNotRecurse()
     MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(std::move(CPM)));
+    MPM.addPass(MallocInlinerPass());
   }
   
   if (shouldUsePass("Malloc2DynAllocaPass")) {
