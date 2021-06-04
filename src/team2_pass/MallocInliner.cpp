@@ -17,9 +17,6 @@ PreservedAnalyses MallocInlinerPass::run(Module &M, ModuleAnalysisManager &MAM) 
   for (Function &F : M)
     if (F.doesNotRecurse() && list.find(&F) == list.end())
       updateList(F, list); // update to true or false
-  
-  for (auto &X : list)
-    outs() << X.first->getName() << " " << X.second << "\n";
 
   // if main has no-loop malloc, inline occurs
   // inline functions having no-loop malloc in main until no update
@@ -40,7 +37,8 @@ PreservedAnalyses MallocInlinerPass::run(Module &M, ModuleAnalysisManager &MAM) 
             Function *CF = CI->getCalledFunction();
             if (list.find(CF) != list.end() && list[CF]) { // can do inline
               InlineFunctionInfo IFI;
-              InlineFunction(*CI, IFI);
+              InlineResult res = InlineFunction(*CI, IFI);
+              assert(res.isSuccess() && "unexpected failure to inline");
               update = true;
               break; // update step by step
             }
