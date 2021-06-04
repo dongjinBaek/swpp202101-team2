@@ -16,7 +16,7 @@ LLVMCONFIG=$1/llvm-config
 
 CXXFLAGS=`$LLVMCONFIG --cxxflags`
 SRCROOT=`$LLVMCONFIG --src-root`
-CXXFLAGS="$CXXFLAGS -std=c++17 -g -I${SRCROOT}/include ${ISYSROOT}"
+CXXFLAGS="$CXXFLAGS -std=c++17 -O2 -I${SRCROOT}/include ${ISYSROOT}"
 CXXFLAGS="$CXXFLAGS -I${SRCROOT}/utils/unittest/googletest/include"
 CXXFLAGS="$CXXFLAGS -I${SRCROOT}/utils/unittest/googletest/"
 
