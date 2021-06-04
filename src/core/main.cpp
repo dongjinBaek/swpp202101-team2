@@ -185,8 +185,6 @@ int main(int argc, char *argv[]) {
 
   SplitSelfLoopPass().run(*M, MAM);
   UnfoldVectorInstPass().run(*M, MAM);
-  LivenessAnalysis().run(*M, MAM);
-  SpillCostAnalysis().run(*M, MAM);
   AddressArgCastPass().run(*M, MAM);
   ConstExprRemovePass().run(*M, MAM);
   GEPUnpackPass().run(*M, MAM);
