@@ -8,10 +8,10 @@ using namespace team2_pass;
 
 namespace team2_pass {
 
-// find int32 load or store
-bool findInt32LoadStore(Module &M) {
-    Type *Int32Ty = Type::getInt32Ty(M.getContext());
+static Type *Int32Ty, *Int64Ty, *Int32PtrTy, *Int64PtrTy;
 
+// find int32 load or store
+static bool findInt32LoadStore(Module &M) {
     bool hasInt32 = false;
     for (Function &F : M) {
     for (BasicBlock &BB : F) {
@@ -19,41 +19,30 @@ bool findInt32LoadStore(Module &M) {
         LoadInst *LI = dyn_cast<LoadInst>(&I);
         StoreInst *SI = dyn_cast<StoreInst>(&I);
 
-        if (LI && LI->getType() == Int32Ty) {
+        if (LI && LI->getType() == Int32Ty)
             return true;
-        }
-        else if (SI && SI->getOperand(0)->getType() == Int32Ty) {
+        else if (SI && SI->getOperand(0)->getType() == Int32Ty)
             return true;
-        }
     }}}
     return false;
 }
 
 // replace all i32 loads/stores to i64 loads/stores
-void replaceI32LoadStores(Module &M) {
-    Type *Int32Ty = Type::getInt32Ty(M.getContext());
-    Type *Int64Ty = Type::getInt64Ty(M.getContext());
-    Type *Int64PtrTy = Type::getInt64PtrTy(M.getContext());
-
+static void replaceI32LoadStores(Module &M) {
     // collect instructions to replace, because iterator breaks when replacing
-    vector<Instruction *> toReplace;
+    vector<Instruction *> instructions;
     for (Function &F : M) {
     for (BasicBlock &BB : F) {
     for (Instruction &I : BB) {
-        LoadInst *LI = dyn_cast<LoadInst>(&I);
-        StoreInst *SI = dyn_cast<StoreInst>(&I);
-        if (LI && LI->getType() == Int32Ty)
-            toReplace.push_back(&I);
-        else if (SI && SI->getOperand(0)->getType() == Int32Ty) 
-            toReplace.push_back(&I);
+        instructions.push_back(&I);
     }}}
 
     // replace collected instructions
-    for (auto it = toReplace.begin(); it != toReplace.end(); it++) {
+    for (auto it = instructions.begin(); it != instructions.end(); it++) {
         LoadInst *LI = dyn_cast<LoadInst>(*it);
         StoreInst *SI = dyn_cast<StoreInst>(*it);
 
-        if (LI) {
+        if (LI && LI->getType() == Int32Ty) {
             Value *Ptr32 = LI->getPointerOperand();
             Instruction *Ptr64 = BitCastInst::Create(Instruction::CastOps::BitCast, Ptr32, Int64PtrTy, "", LI);
             Instruction *NewLI = new LoadInst(Int64Ty, Ptr64, "", LI);
@@ -62,7 +51,7 @@ void replaceI32LoadStores(Module &M) {
             LI->eraseFromParent();
             LLVM_DEBUG(dbgs() << "I32TO64: replace to " << *NewLI << "\n");
         }
-        else if (SI) {
+        else if (SI && SI->getOperand(0)->getType() == Int32Ty) {
             Value *Ptr32 = SI->getPointerOperand();
             Value *Val32 = SI->getOperand(0);
             Instruction *Ptr64 = BitCastInst::Create(Instruction::CastOps::BitCast, Ptr32, Int64PtrTy, "", SI);
@@ -75,23 +64,17 @@ void replaceI32LoadStores(Module &M) {
 }
 
 // modify all malloc/alloca to allocate twice as much as original size
-void doubleAllocation(Module &M) {
-    Type *Int32Ty = Type::getInt32Ty(M.getContext());
-    Type *Int64Ty = Type::getInt64Ty(M.getContext());
-    Type *Int32PtrTy = Type::getInt32PtrTy(M.getContext());
-    Type *Int64PtrTy = Type::getInt64PtrTy(M.getContext());
-
+static void doubleAllocation(Module &M) {
     vector<Instruction *> instructions;
-
     for (Function &F : M) {
     for (BasicBlock &BB : F) {
     for (Instruction &I : BB) {
         instructions.push_back(&I);
     }}}
 
-    for (auto it = instructions.begin(); it != instructions.end(); it++) {
-        CallInst *CI = dyn_cast<CallInst>(*it);
-        AllocaInst *AI = dyn_cast<AllocaInst>(*it);
+    for (Instruction *I : instructions) {
+        CallInst *CI = dyn_cast<CallInst>(I);
+        AllocaInst *AI = dyn_cast<AllocaInst>(I);
 
         if (CI) {
             Function *F = CI->getCalledFunction();
@@ -104,23 +87,22 @@ void doubleAllocation(Module &M) {
                 LLVM_DEBUG(dbgs() << "I32TO64: replace to " << *CI << "\n");
             }
         }
-
         if (AI) {
             Type *T = AI->getAllocatedType();
             assert (T != Int32PtrTy && "T is int32ptrty");
             if (T->isArrayTy()) {
                 ArrayType *AT = dyn_cast<ArrayType>(T);
                 if (AT->getElementType() == Int32Ty) {
-                    uint64_t numElements = AT->getNumElements();
-                    Type *NewAT = ArrayType::get(Int64Ty, numElements * 2);
+                    uint64_t num = AT->getNumElements();
+                    Type *NewAT = ArrayType::get(Int64Ty, num * 2);
                     Instruction *NewAI = new AllocaInst(NewAT, 0, "", AI);
 
                     // replace users arraytype, operand
                     vector<Value *> users;
-                    for (auto it = AI->user_begin(); it != AI->user_end(); it++) {
+                    for (auto it = AI->user_begin(); it != AI->user_end(); it++)
                         users.push_back(*it);
-                    }
                     for (auto it = users.begin(); it != users.end(); it++) {
+                        Instruction *I = dyn_cast<Instruction>(*it);
                         GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(*it);
                         assert (GEP && "all alloca users should be GEP");
                         GEP->setSourceElementType(NewAT);
@@ -128,7 +110,7 @@ void doubleAllocation(Module &M) {
                     }
 
                     AI->eraseFromParent();
-                    LLVM_DEBUG(dbgs() << "I32TO64: replace to " << NewAI << "\n");
+                    LLVM_DEBUG(dbgs() << "I32TO64: replace to " << *NewAI << "\n");
                 }
             }
         }
@@ -136,10 +118,7 @@ void doubleAllocation(Module &M) {
 }
 
 // double i32 GEP offset to load valid memory, only works when little endian
-void doubleGEPOffset(Module &M) {
-    Type *Int64Ty = Type::getInt64Ty(M.getContext());
-    Type *Int32PtrTy = Type::getInt32PtrTy(M.getContext());
-
+static void doubleGEPOffset(Module &M) {
     for (Function &F : M) {
     for (BasicBlock &BB : F) {
     for (Instruction &I : BB) {
@@ -161,31 +140,79 @@ void doubleGEPOffset(Module &M) {
     }}}
 }
 
-// replace all i32 global variable to i64
-void doubleI32Global(Module &M) {
-    for (auto it = M.global_begin(); it != M.global_end(); it++) {
-        dbgs() << it->getName() << "\n";
-        Type *T = it->getType();
-        if (T->isVectorTy()) {
+// double all i32 global array size
+static void doubleI32GlobalArray(Module &M) {
+    vector<GlobalVariable *> globalVariables;
+    for (auto it = M.global_begin(); it != M.global_end(); it++)
+        globalVariables.push_back(&(*it));
+
+    for (GlobalVariable *GV : globalVariables) {
+        Type *T = GV->getValueType();
+        if (T->isArrayTy()) {
+            ArrayType *AT = dyn_cast<ArrayType>(T);
+            if (AT->getElementType() == Int32Ty) {
+                // double the array type
+                uint64_t num = AT->getNumElements();
+                Type *NewAT = ArrayType::get(Int32Ty, num * 2);
+                GlobalVariable *NewGV = new GlobalVariable(M, NewAT, false, GlobalValue::ExternalLinkage, nullptr);
+
+                // replace users' arraytype, operand
+                vector<Value *> users;
+                for (Value *V : GV->users())
+                    users.push_back(V);
+                for (Value *V : users) {
+                    GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(V);
+                    ConstantExpr *CE = dyn_cast<ConstantExpr>(V);
+
+                    if (GEP) {
+                        GEP->setSourceElementType(NewAT);
+                        GEP->setOperand(0, NewGV);
+                    }
+                    else if (CE) {
+                        GetElementPtrInst *NewGEP = dyn_cast<GetElementPtrInst>(CE->getAsInstruction());
+                        Value *Offset = NewGEP->getOperand(2);
+                        Instruction *DO = BinaryOperator::Create(Instruction::BinaryOps::Mul, Offset, ConstantInt::get(Int64Ty, 2));
+                        NewGEP->setOperand(2, DO);
+                        NewGEP->setOperand(0, NewGV);
+                        NewGEP->setSourceElementType(NewAT);
+                        NewGEP->insertBefore(dyn_cast<Instruction>(*CE->user_begin()));
+                        DO->insertBefore(NewGEP);
+
+                        vector<User *> CE_users;
+                        for (auto user : CE->users()) CE_users.push_back(user);
+                        for (auto user : CE_users) {
+                            BitCastInst *BitCastI = dyn_cast<BitCastInst>(user);
+                            assert(BitCastI && "all GV ConstantExpr users are BitCastI");
+                            BitCastI->setOperand(0, NewGEP);
+                        }
+                        CE->destroyConstant();
+                    }
+                }
+                GV->eraseFromParent();
+                LLVM_DEBUG(dbgs() << "I32TO64: replace to " << NewGV << "\n");
+            }
         }
     }
 }
 
 PreservedAnalyses Int32To64Pass::run(Module &M, ModuleAnalysisManager &MAM) {
+    Int32Ty = Type::getInt32Ty(M.getContext());
+    Int64Ty = Type::getInt64Ty(M.getContext());
+    Int32PtrTy = Type::getInt32PtrTy(M.getContext());
+    Int64PtrTy = Type::getInt64PtrTy(M.getContext());
+
     bool found = findInt32LoadStore(M);
     LLVM_DEBUG(dbgs() << "I32TO64: found i32 load/store - " << found << "\n";);
     LLVM_DEBUG(dbgs() << "I32TO64: number of global variables - " << M.global_size() << "\n";);
 
-    if (found && !M.global_size()) {  // do not convert if global variable exist
+    if (found) {  // do not convert if global variable exist
         replaceI32LoadStores(M);
         doubleAllocation(M);
         doubleGEPOffset(M);
-        // doubleI32Global(M);
+        doubleI32GlobalArray(M);
         return PreservedAnalyses::none();
     }
-    else {
-        return PreservedAnalyses::all();
-    }
+    else return PreservedAnalyses::all();
 }
 
 } // namespace team2_pass
