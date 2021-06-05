@@ -87,6 +87,7 @@ PreservedAnalyses ExtractFromLoopPass::run(Function &F, FunctionAnalysisManager 
               applyLoopExtract = false;
             }
           }
+          
           if (applyLoopExtract) {
             auto *BBHeader = L->getHeader();
             PHINode *phi = PHINode::Create(LI->getType(), 1 + L->getNumBackEdges(),
@@ -98,6 +99,20 @@ PreservedAnalyses ExtractFromLoopPass::run(Function &F, FunctionAnalysisManager 
             phi->addIncoming(LI, Preheader);
             for (auto *Latch : Latches) {
               phi->addIncoming(SI->getOperand(0), Latch);
+            }
+            SmallVector<std::pair<BasicBlock *, BasicBlock *> > ExitEdges;
+            L->getExitEdges(ExitEdges);
+            if (ExitEdges.size() == 1) {
+              BasicBlock *Exiting = ExitEdges[0].first;
+              BasicBlock *Exited = ExitEdges[0].second;
+              if (DT.dominates(Preheader, Exited)) {
+                SI->moveBefore(Exited->getFirstNonPHI());
+                PHINode *phi2 = PHINode::Create(SI->getOperand(0)->getType(), 1,
+                  "store.phi" + to_string(cnt++), Exited->getFirstNonPHI());
+                phi2->addIncoming(phi, Exiting);
+                SI->setOperand(0, phi2);
+                SI->setOperand(1, LI->getOperand(0));
+              }
             }
             return;
           }
