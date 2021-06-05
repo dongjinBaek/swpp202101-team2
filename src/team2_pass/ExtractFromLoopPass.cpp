@@ -100,17 +100,20 @@ PreservedAnalyses ExtractFromLoopPass::run(Function &F, FunctionAnalysisManager 
             for (auto *Latch : Latches) {
               phi->addIncoming(SI->getOperand(0), Latch);
             }
+            // only extract store when there is 1 exit edge & it is starting from loop header
             SmallVector<std::pair<BasicBlock *, BasicBlock *> > ExitEdges;
             L->getExitEdges(ExitEdges);
-            if (ExitEdges.size() == 1) {
+            if (ExitEdges.size() == 1 && ExitEdges[0].first == BBHeader) {
               BasicBlock *Exiting = ExitEdges[0].first;
               BasicBlock *Exited = ExitEdges[0].second;
               if (DT.dominates(Preheader, Exited)) {
                 SI->moveBefore(Exited->getFirstNonPHI());
-                PHINode *phi2 = PHINode::Create(SI->getOperand(0)->getType(), 1,
+                // to preserve loop lcssa form, create a phi node at exited edge.
+                // use this phi node in the store instruction
+                PHINode *Phi2 = PHINode::Create(SI->getOperand(0)->getType(), 1,
                   "store.phi" + to_string(cnt++), Exited->getFirstNonPHI());
-                phi2->addIncoming(phi, Exiting);
-                SI->setOperand(0, phi2);
+                phi2->addIncoming(Phi, Exiting);
+                SI->setOperand(0, Phi2);
                 SI->setOperand(1, LI->getOperand(0));
               }
             }
