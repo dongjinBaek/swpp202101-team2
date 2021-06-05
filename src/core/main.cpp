@@ -10,6 +10,7 @@
 #include "../team2_pass/ArithmeticPass.h"
 #include "../team2_pass/IntegerEqPropagation.h"
 #include "../team2_pass/Malloc2DynAlloca.h"
+#include "../team2_pass/Alloca2RegPass.h"
 #include "../team2_pass/RemoveLoopMetadata.h"
 #include "../team2_pass/Vectorize.h"
 #include "../team2_pass/ExtractFromLoopPass.h"
@@ -118,6 +119,10 @@ int main(int argc, char *argv[]) {
   
   if (shouldUsePass("Malloc2DynAllocaPass")) {
     MPM.addPass(Malloc2DynAllocaPass());
+  }
+
+  if (shouldUsePass("Alloca2RegPass")) {
+    MPM.addPass(Alloca2RegPass());
   }
   
   if (shouldUsePass("ExtractFromLoopPass")) {
