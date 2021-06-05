@@ -205,7 +205,7 @@ PreservedAnalyses Int32To64Pass::run(Module &M, ModuleAnalysisManager &MAM) {
     LLVM_DEBUG(dbgs() << "I32TO64: found i32 load/store - " << found << "\n";);
     LLVM_DEBUG(dbgs() << "I32TO64: number of global variables - " << M.global_size() << "\n";);
 
-    if (found) {  // do not convert if global variable exist
+    if (found) {
         replaceI32LoadStores(M);
         doubleAllocation(M);
         doubleGEPOffset(M);
