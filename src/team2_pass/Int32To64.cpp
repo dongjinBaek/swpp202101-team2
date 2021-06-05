@@ -141,7 +141,7 @@ static void doubleGEPOffset(Module &M) {
 }
 
 // double all i32 global array size
-static void doubleI32GlobalArray(Module &M) {
+static void doubleI32GlobalArray(Module &M, ModuleAnalysisManager &MAM) {
     vector<GlobalVariable *> globalVariables;
     for (auto it = M.global_begin(); it != M.global_end(); it++)
         globalVariables.push_back(&(*it));
@@ -172,20 +172,25 @@ static void doubleI32GlobalArray(Module &M) {
                         GetElementPtrInst *NewGEP = dyn_cast<GetElementPtrInst>(CE->getAsInstruction());
                         Value *Offset = NewGEP->getOperand(2);
                         Instruction *DO = BinaryOperator::Create(Instruction::BinaryOps::Mul, Offset, ConstantInt::get(Int64Ty, 2));
-                        NewGEP->setOperand(2, DO);
                         NewGEP->setOperand(0, NewGV);
                         NewGEP->setSourceElementType(NewAT);
-                        NewGEP->insertBefore(dyn_cast<Instruction>(*CE->user_begin()));
-                        DO->insertBefore(NewGEP);
 
                         vector<User *> CE_users;
                         for (auto user : CE->users()) CE_users.push_back(user);
                         for (auto user : CE_users) {
                             BitCastInst *BitCastI = dyn_cast<BitCastInst>(user);
                             assert(BitCastI && "all GV ConstantExpr users are BitCastI");
-                            BitCastI->setOperand(0, NewGEP);
+
+                            Instruction *CopyGEP = NewGEP->clone();
+                            Instruction *CopyDO = DO->clone();
+                            CopyGEP->insertBefore(BitCastI);
+                            CopyGEP->setOperand(2, CopyDO);
+                            CopyDO->insertBefore(CopyGEP);
+                            BitCastI->setOperand(0, CopyGEP);
                         }
                         CE->destroyConstant();
+                        NewGEP->deleteValue();
+                        DO->deleteValue();
                     }
                 }
                 GV->eraseFromParent();
@@ -209,7 +214,7 @@ PreservedAnalyses Int32To64Pass::run(Module &M, ModuleAnalysisManager &MAM) {
         replaceI32LoadStores(M);
         doubleAllocation(M);
         doubleGEPOffset(M);
-        doubleI32GlobalArray(M);
+        doubleI32GlobalArray(M, MAM);
         return PreservedAnalyses::none();
     }
     else return PreservedAnalyses::all();
