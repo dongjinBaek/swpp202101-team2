@@ -13,8 +13,8 @@ namespace team2_pass {
 PreservedAnalyses Alloca2RegPass::run(Module &M, ModuleAnalysisManager &MAM) {
             Regs = vector<LoadInst *>();
             InstsToRemove = vector<Instruction *>();
+  int cnt = 0;
   for (auto &F : M) {
-    int cnt = 0;
     for (auto &BB : F) {
       for (auto &I : BB) {
         AllocaInst *AI = dyn_cast<AllocaInst>(&I);
@@ -27,7 +27,7 @@ PreservedAnalyses Alloca2RegPass::run(Module &M, ModuleAnalysisManager &MAM) {
             Regs.clear();
             InstsToRemove.clear();
             for (int i=0; i<n; i++) {
-              Constant *Reg = M.getOrInsertGlobal("$reg"+to_string(i), ET);
+              Constant *Reg = M.getOrInsertGlobal("$reg"+to_string(cnt++), ET);
               LoadInst *Inst = new LoadInst(ET, Reg, "load_reg"+to_string(i), F.getEntryBlock().getFirstNonPHI());
               Regs.push_back(Inst);
             }
