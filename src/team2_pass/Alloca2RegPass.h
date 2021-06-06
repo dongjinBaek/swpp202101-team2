@@ -30,6 +30,7 @@ public:
     PreservedAnalyses run(Module &, ModuleAnalysisManager &);
 private:
     uint64_t n;
+    int cnt;
     int elementBitWidth;
     vector<LoadInst *> Regs;
     vector<Instruction *> InstsToRemove;

@@ -13,7 +13,7 @@ namespace team2_pass {
 PreservedAnalyses Alloca2RegPass::run(Module &M, ModuleAnalysisManager &MAM) {
             Regs = vector<LoadInst *>();
             InstsToRemove = vector<Instruction *>();
-  int cnt = 0;
+            cnt =0;
   for (auto &F : M) {
     for (auto &BB : F) {
       for (auto &I : BB) {
@@ -58,11 +58,11 @@ void Alloca2RegPass::changeUseOfGEPToSwitch(GetElementPtrInst *GEPI, Function &F
     if (LoadInst* LI = dyn_cast<LoadInst>(I)) {
       // split current basic block in two, diving from LI
       auto *DownBB = LI->getParent();
-      auto *UpBB = DownBB->splitBasicBlockBefore(LI, "splitted");
+      auto *UpBB = DownBB->splitBasicBlockBefore(LI, "splitted" + to_string(cnt++));
       // insert n simple basic blocks for switch
       vector<BasicBlock *> SwitchBBs;
       for (int i=0; i<n; i++) {
-        auto *SwitchBB = BasicBlock::Create(F.getContext(), "splitted_bb"+to_string(i), &F, DownBB);
+        auto *SwitchBB = BasicBlock::Create(F.getContext(), "splitted_bb"+to_string(cnt++), &F, DownBB);
         IRBuilder<> builder(SwitchBB);
         auto *Br = BranchInst::Create(DownBB);
         builder.Insert(Br);
@@ -87,11 +87,11 @@ void Alloca2RegPass::changeUseOfGEPToSwitch(GetElementPtrInst *GEPI, Function &F
     else if (StoreInst* SI = dyn_cast<StoreInst>(I)) {
       // split current basic block in two, diving from LI
       auto *DownBB = SI->getParent();
-      auto *UpBB = DownBB->splitBasicBlockBefore(SI, "splitted");
+      auto *UpBB = DownBB->splitBasicBlockBefore(SI, "splitted"+ to_string(cnt++));
       // insert n simple basic blocks for switch
       vector<BasicBlock *> SwitchBBs;
       for (int i=0; i<n; i++) {
-        auto *SwitchBB = BasicBlock::Create(F.getContext(), "splitted_bb"+to_string(i), &F, DownBB);
+        auto *SwitchBB = BasicBlock::Create(F.getContext(), "splitted_bb"+ to_string(cnt++), &F, DownBB);
         IRBuilder<> builder(SwitchBB);
         auto *Br = BranchInst::Create(DownBB);
         builder.Insert(Br);
