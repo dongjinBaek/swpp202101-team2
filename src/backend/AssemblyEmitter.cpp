@@ -293,9 +293,12 @@ void AssemblyEmitter::visitCallInst(CallInst& I) {
         *fout << ".__sp.next" + str << ":\n";
     }
     else if (Fname == "$store") {
-        assert(args.size()==2 && "argument of $store() should be 2");
+        assert(args.size()==3 && "argument of $store() should be 3");
         string name0 = name(I.getArgOperand(0)), name1 = name(I.getArgOperand(1));
-        *fout << emitInst({name0, "= mul 1", name1, "32"});
+        ConstantInt *CI = dyn_cast<ConstantInt>(I.getOperand(2));
+        assert(CI && "%store bitwidth not ConstantInt");
+        string width = to_string(CI->getZExtValue());
+        *fout << emitInst({name0, "= mul 1", name1, width});
     }
     else if(Fname == "free") {
         assert(args.size()==1 && "argument of free() should be 1");

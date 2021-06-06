@@ -21,7 +21,9 @@ PreservedAnalyses Alloca2RegPass::run(Module &M, ModuleAnalysisManager &MAM) {
         if (AI) {
           if (canChangeAlloca2Reg(AI)) {
             Type *ET = AI->getAllocatedType()->getArrayElementType();
-            FunctionCallee S = M.getOrInsertFunction("$store", Type::getVoidTy(M.getContext()), ET, ET);
+            elementBitWidth = ET->getIntegerBitWidth();
+            FunctionCallee S = M.getOrInsertFunction("$store", Type::getVoidTy(M.getContext()),
+                                                                   ET, ET, Type::getInt32Ty(M.getContext()));
             Regs.clear();
             InstsToRemove.clear();
             for (int i=0; i<n; i++) {
@@ -34,8 +36,6 @@ PreservedAnalyses Alloca2RegPass::run(Module &M, ModuleAnalysisManager &MAM) {
                 auto *GEPI = dyn_cast<GetElementPtrInst>(*it);
                 if (GEPI) {
                   changeUseOfGEPToSwitch(GEPI, F, S);
-
-    
                 } else {
                   assert("use not GEP!!");
                 }
@@ -95,9 +95,10 @@ void Alloca2RegPass::changeUseOfGEPToSwitch(GetElementPtrInst *GEPI, Function &F
         IRBuilder<> builder(SwitchBB);
         auto *Br = BranchInst::Create(DownBB);
         builder.Insert(Br);
-        // insert $store(reg, val) instead of SI, and handle it in backend
-        Value *Args[] = {Regs[i], SI->getOperand(0)};
-        CallInst *StoreCI = CallInst::Create(S, ArrayRef<Value *>(Args, 2), "", Br);
+        // insert $store(reg, val, bitwidth) instead of SI, and handle it in backend
+        Value *Args[] = {Regs[i], SI->getOperand(0), 
+                          ConstantInt::get(S.getFunctionType()->getParamType(2), elementBitWidth)};
+        CallInst *StoreCI = CallInst::Create(S, ArrayRef<Value *>(Args, 3), "", Br);
         SwitchBBs.push_back(SwitchBB);
       }
       // change terminator inst of upper splitted block to switch
@@ -117,7 +118,7 @@ void Alloca2RegPass::changeUseOfGEPToSwitch(GetElementPtrInst *GEPI, Function &F
 
 bool Alloca2RegPass::canChangeAlloca2Reg(AllocaInst *AI) {
   Type *AT = AI->getAllocatedType();
-  return AT->isArrayTy() && (n = AT->getArrayNumElements()) <= 10;
+  return AT->isArrayTy() && (n = AT->getArrayNumElements()) <= 10 && AT->getArrayElementType()->isIntegerTy();
 }
 
 

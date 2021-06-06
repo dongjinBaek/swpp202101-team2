@@ -30,6 +30,7 @@ public:
     PreservedAnalyses run(Module &, ModuleAnalysisManager &);
 private:
     uint64_t n;
+    int elementBitWidth;
     vector<LoadInst *> Regs;
     vector<Instruction *> InstsToRemove;
     void changeUseOfGEPToSwitch(GetElementPtrInst *, Function &,FunctionCallee &);
