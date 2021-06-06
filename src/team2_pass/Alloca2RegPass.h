@@ -33,6 +33,7 @@ private:
     vector<LoadInst *> Regs;
     vector<Instruction *> InstsToRemove;
     void changeUseOfGEPToSwitch(GetElementPtrInst *, Function &,FunctionCallee &);
+    bool canChangeAlloca2Reg(AllocaInst *);
 };
 }
 
