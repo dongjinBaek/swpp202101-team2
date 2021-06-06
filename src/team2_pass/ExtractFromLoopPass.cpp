@@ -90,15 +90,15 @@ PreservedAnalyses ExtractFromLoopPass::run(Function &F, FunctionAnalysisManager 
           
           if (applyLoopExtract) {
             auto *BBHeader = L->getHeader();
-            PHINode *phi = PHINode::Create(LI->getType(), 1 + L->getNumBackEdges(),
+            PHINode *Phi = PHINode::Create(LI->getType(), 1 + L->getNumBackEdges(),
                   "extract.loop" + to_string(cnt++), BBHeader->getFirstNonPHI());
             // move load instruction to the end of preheader block
             LI->moveBefore(Preheader->getTerminator());
-            LI->replaceAllUsesWith(phi);
+            LI->replaceAllUsesWith(Phi);
             // construct phinode
-            phi->addIncoming(LI, Preheader);
+            Phi->addIncoming(LI, Preheader);
             for (auto *Latch : Latches) {
-              phi->addIncoming(SI->getOperand(0), Latch);
+              Phi->addIncoming(SI->getOperand(0), Latch);
             }
             // only extract store when there is 1 exit edge & it is starting from loop header
             SmallVector<std::pair<BasicBlock *, BasicBlock *> > ExitEdges;
@@ -112,7 +112,7 @@ PreservedAnalyses ExtractFromLoopPass::run(Function &F, FunctionAnalysisManager 
                 // use this phi node in the store instruction
                 PHINode *Phi2 = PHINode::Create(SI->getOperand(0)->getType(), 1,
                   "store.phi" + to_string(cnt++), Exited->getFirstNonPHI());
-                phi2->addIncoming(Phi, Exiting);
+                Phi2->addIncoming(Phi, Exiting);
                 SI->setOperand(0, Phi2);
                 SI->setOperand(1, LI->getOperand(0));
               }
