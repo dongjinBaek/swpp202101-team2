@@ -163,7 +163,7 @@ int main(int argc, char *argv[]) {
   }
   
   if (shouldUsePass("CondBranchDeflationPass")) {
-    MPM.addPass(CondBranchDeflationPass());
+    // MPM.addPass(CondBranchDeflationPass());
   }
 
   if (shouldUsePass("ArithmeticPass")) {

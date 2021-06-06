@@ -31,8 +31,8 @@ public:
 private:
     uint64_t n;
     vector<LoadInst *> Regs;
-    FunctionCallee Store;
-    void changeUseOfGEPToSwitch(GetElementPtrInst *, Function &);
+    vector<Instruction *> InstsToRemove;
+    void changeUseOfGEPToSwitch(GetElementPtrInst *, Function &,FunctionCallee &);
 };
 }
 

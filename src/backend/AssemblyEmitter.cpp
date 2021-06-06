@@ -292,6 +292,11 @@ void AssemblyEmitter::visitCallInst(CallInst& I) {
         *fout << emitInst({"br .__sp.next" + str});
         *fout << ".__sp.next" + str << ":\n";
     }
+    else if (Fname == "$store") {
+        assert(args.size()==2 && "argument of $store() should be 2");
+        string name0 = name(I.getArgOperand(0)), name1 = name(I.getArgOperand(1));
+        *fout << emitInst({name0, "= mul 1", name1, "32"});
+    }
     else if(Fname == "free") {
         assert(args.size()==1 && "argument of free() should be 1");
         *fout << emitInst({"free", name(I.getArgOperand(0))});
