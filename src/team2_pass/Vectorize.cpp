@@ -316,7 +316,6 @@ void VectorizePass::sinkAllLoadUsers(BasicBlock &BB) {
     LoadInst *LI = dyn_cast<LoadInst>(&(*it));
     if (!LI) continue;
 
-    // sinkRecursive(BB, LI);
     vector<Instruction *> users;
     for(auto it = LI->user_begin(); it != LI->user_end(); it++) {
       Instruction *UserI = dyn_cast<Instruction>(*it);
@@ -324,8 +323,7 @@ void VectorizePass::sinkAllLoadUsers(BasicBlock &BB) {
         users.push_back(UserI);
     }
 
-    // iterate in reverse order to maintain their order
-    for(auto it = users.rbegin(); it != users.rend(); it++)
+    for(auto it = users.begin(); it != users.end(); it++)
       sinkRecursive(BB, *it);
   }
 }
