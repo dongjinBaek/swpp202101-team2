@@ -162,8 +162,8 @@ int main(int argc, char *argv[]) {
     MPM.addPass(createModuleToFunctionPassAdaptor(InstCombinePass()));
   }
   
-  if (shouldUsePass("CondBranchDeflationPass")) {
-    // MPM.addPass(CondBranchDeflationPass());
+  if (shouldUsePass("CondBranchDeflationPass") &&!shouldUsePass("Alloca2RegPass")) {
+    MPM.addPass(CondBranchDeflationPass());
   }
 
   if (shouldUsePass("ArithmeticPass")) {
