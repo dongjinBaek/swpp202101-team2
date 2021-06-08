@@ -38,7 +38,7 @@ PreservedAnalyses SetIsNoInlinePass::run(Module &M, ModuleAnalysisManager &MAM) 
   ModulePassManager MPM;
   MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(
       SetNoRecursionPass(&NRS)));
-  MPM.run(M, MAM); // find no recursion functions in cloned module
+  MPM.run(M, MAM); // find no recursion functions in module
 
   set<Function *> Visit;
   bool Changed = false;
