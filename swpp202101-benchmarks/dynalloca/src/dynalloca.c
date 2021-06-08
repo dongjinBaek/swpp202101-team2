@@ -4,7 +4,7 @@
 uint64_t read();
 void write(uint64_t val);
 
-uint64_t global[256];
+extern uint64_t global[256];
 
 void func(uint64_t *temp1, uint64_t *temp2)
 {
