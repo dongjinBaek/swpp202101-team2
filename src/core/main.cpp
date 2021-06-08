@@ -108,13 +108,9 @@ int main(int argc, char *argv[]) {
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-  if (shouldUsePass("SimplificationPipeline"))
+  if (shouldUsePass("SetIsNoInlinePass")) {
     MPM.addPass(buildPreSimplificationPipeline());
-
-  if (shouldUsePass("SetIsNoInlinePass"))
     MPM.addPass(SetIsNoInlinePass());
-  
-  if (shouldUsePass("SimplificationPipeline")) {
     MPM.addPass(buildInlinerPipeline());
     MPM.addPass(buildPostSimplificationPipeline());
   }
