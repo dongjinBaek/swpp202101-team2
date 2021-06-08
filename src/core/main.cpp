@@ -14,24 +14,20 @@
 #include "../team2_pass/Vectorize.h"
 #include "../team2_pass/ExtractFromLoopPass.h"
 #include "../team2_pass/IROutliner.h"
-#include "../team2_pass/AddNoRecurseAttrs.h"
-#include "../team2_pass/MallocInliner.h"
+#include "../team2_pass/SetIsNoInline.h"
+#include "../team2_pass/Pipeline.h"
 
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/IR/PassManager.h"
-#include "llvm/Transforms/InstCombine/InstCombine.h"
-#include "llvm/Transforms/Scalar/SimplifyCFG.h"
-#include "llvm/Transforms/Scalar/GVN.h"
-#include "llvm/Transforms/Scalar/CorrelatedValuePropagation.h"
 
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/CommandLine.h"
 
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
-#include "llvm/Transforms/Scalar/DCE.h"
+#include "llvm/Transforms/Scalar/GVN.h"
 
 #include "llvm/Transforms/Scalar/LoopInstSimplify.h"
 #include "llvm/Transforms/Scalar/LoopPassManager.h"
@@ -93,7 +89,6 @@ int main(int argc, char *argv[]) {
 
   // execute IR passes
   ModulePassManager MPM;
-  CGSCCPassManager CPM;
 
   LoopAnalysisManager LAM;
   FunctionAnalysisManager FAM;
@@ -113,17 +108,17 @@ int main(int argc, char *argv[]) {
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-  if (shouldUsePass("MallocInlinerPass")) {
-    //CPM.addPass(InlinerPass());
-    CPM.addPass(AddNoRecurseAttrsPass()); // to use F.doesNotRecurse()
-    MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(std::move(CPM)));
-    MPM.addPass(MallocInlinerPass());
-  }
+  if (shouldUsePass("SimplificationPipeline"))
+    MPM.addPass(buildPreSimplificationPipeline());
+
+  if (shouldUsePass("SetIsNoInlinePass"))
+    MPM.addPass(SetIsNoInlinePass());
   
-  if (shouldUsePass("Malloc2DynAllocaPass")) {
-    MPM.addPass(Malloc2DynAllocaPass());
+  if (shouldUsePass("SimplificationPipeline")) {
+    MPM.addPass(buildInlinerPipeline());
+    MPM.addPass(buildPostSimplificationPipeline());
   }
-  
+
   if (shouldUsePass("ExtractFromLoopPass")) {
     FunctionPassManager FPM;
 
@@ -163,6 +158,10 @@ int main(int argc, char *argv[]) {
   
   if (shouldUsePass("CondBranchDeflationPass")) {
     MPM.addPass(CondBranchDeflationPass());
+  }
+
+  if (shouldUsePass("Malloc2DynAllocaPass")) {
+    MPM.addPass(Malloc2DynAllocaPass());
   }
 
   if (shouldUsePass("ArithmeticPass")) {
