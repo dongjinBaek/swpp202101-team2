@@ -1,5 +1,5 @@
-#ifndef INT64TO32_H
-#define INT64TO32_H
+#ifndef SCALETOINT64_H
+#define SCALETOINT64_H
 
 #include <algorithm>
 #include <map>
@@ -24,7 +24,7 @@ namespace team2_pass {
 // Convert Int32 loads/stores to int64 loads/stores to lower the temperature.
 // Malloc, alloca, and global variable sizes should be doubled.
 // Int32 GetElementPtr offsets should be doubled too.
-class Int32To64Pass : public PassInfoMixin<Int32To64Pass> {
+class ScaleToInt64Pass : public PassInfoMixin<ScaleToInt64Pass> {
 public:
     PreservedAnalyses run(Module &, ModuleAnalysisManager &);
 };
