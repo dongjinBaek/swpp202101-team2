@@ -101,10 +101,6 @@ int main(int argc, char *argv[]) {
 
   PassBuilder PB;
 
-  // DebugFlag = true;
-  // const char *debugTypes[] = {"vectorize", "loop-unroll"};
-  // setCurrentDebugTypes(debugTypes, 2);
-
   // register all the basic analyses with the managers.
   PB.registerModuleAnalyses(MAM);
   PB.registerCGSCCAnalyses(CGAM);

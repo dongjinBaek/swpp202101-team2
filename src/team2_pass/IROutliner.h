@@ -5,15 +5,10 @@
  * IROutlinerPass
  * Author: SeongHun Kim
  * 
- * Find a suitable location to divide an IR function
- * so that the latter portion can be outlined into another function
+ * Find a BasicBlock that would use too many registers
+ * and outline its interior as a new function
  * 
- * Current strategy:
- * when the cumulative IR-reg count goes over some threshold
- * check if all reachable regions thereafter are dominated
- *      (and thus, have no loops or phis. This constraint is too strong!)
- * collect all values that appear before the split point
- *      TODO : Split the block into caller and callee
+ * Current strategy: Block-by-block, use-based
 ********************************************/ 
 
 #include "llvm/IR/Function.h"
@@ -38,18 +33,6 @@ using namespace std;
 
 namespace team2_pass {
 class IROutlinerPass : public PassInfoMixin<IROutlinerPass> {
-// store <BasicBlock, reg count> pair
-static vector<pair<BasicBlock *, unsigned>> blockRegCnt;
-// visit history for DFS
-static vector<BasicBlock *> visit;
-// store all previous Values (potential parameters)
-static vector<Value *> prevValues;
-// fill the blockRegCnt vector by DFS toward successors
-void countRegs(BasicBlock *, unsigned);
-// check if a block meets the criteria for spliting
-bool domReachNoLoop(Instruction *, BasicBlock *, DominatorTree &);
-// fill the prevValues vector by DFS toward predecessors
-void gatherPrevValues(BasicBlock *);
 public:
     PreservedAnalyses run(Module &, ModuleAnalysisManager &);
 };

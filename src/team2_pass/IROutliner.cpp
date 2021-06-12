@@ -9,130 +9,143 @@ using namespace std;
 using namespace llvm;
 using namespace team2_pass;
 
-// consider outlining when the IR-reg count goes over this value
-#define THRESHOLD_REGNO 30
+// attempt outlining when the estimate score goes over this value
+#define THR_CNT 60
+// max number of arguments for outlined function
+// slightly less than 16 for safety; argument selection may not be accurate
+#define ARGMAX 13
 
 namespace team2_pass {
-// store <BasicBlock, reg count> pair
-vector<pair<BasicBlock *, unsigned>> IROutlinerPass::blockRegCnt;
-// visit history for DFS
-vector<BasicBlock *> IROutlinerPass::visit;
-// store all previous Values (potential parameters)
-vector<Value *> IROutlinerPass::prevValues;
-
-// fill the blockRegCnt vector by DFS toward successors
-void IROutlinerPass::countRegs(BasicBlock *BB, unsigned predCnt){
-    for(auto p : blockRegCnt)
-        if(p.first == BB) return;   // loop; backtrack
-    unsigned cnt = predCnt;
-    // count instructions that are worth a reg
-    for(auto &I : *BB){
-        if (I.hasName()
-            || (!I.hasName() && !I.getType()->isVoidTy()))
-            cnt++;
-    }
-    blockRegCnt.push_back(make_pair(BB, cnt));
-    for(auto *succ : successors(BB))
-        countRegs(succ, cnt);
-}
-
-// recursively check whether I dominates BB and all blocks reachable by it
-bool IROutlinerPass::domReachNoLoop(Instruction *I, BasicBlock *BB, DominatorTree &DT){
-    if(find(visit.begin(), visit.end(), BB) != visit.end())
-        return false;   // loop
-    if(!DT.dominates(I, BB) && !(I->getParent()==BB))
-        return false;   // not dominated
-    visit.push_back(BB);
-    Instruction *TI = dyn_cast<Instruction>(BB->getTerminator());
-    // if one of the successors gives false, check can end immediately
-    bool ret = true;
-    for (unsigned s=0; ret && s < TI->getNumSuccessors(); ++s)
-        ret = ret && domReachNoLoop(I, TI->getSuccessor(s), DT);
-    return ret;
-}
-
-// fill the prevValues vector by DFS toward predecessors
-void IROutlinerPass::gatherPrevValues(BasicBlock *BB){
-    if(find(visit.begin(), visit.end(), BB) != visit.end())
-        return;     // loop
-    visit.push_back(BB);
-    for(auto &I : *BB)
-        if(!I.getType()->isVoidTy())
-            prevValues.push_back(&I);
-    for(auto *pred : predecessors(BB))
-        gatherPrevValues(pred);
-}
-
 PreservedAnalyses IROutlinerPass::run(Module &M, ModuleAnalysisManager &MAM) {
 
-    // this loop must be fixed when this code becomes able to create new function
-    for (auto &F : M) {
-        // outs() << "==" << F.getName() << '\n';
+    // outline each function no more than once
+    // or this pass might run too long
+    vector<Function *> vecF;
+    for (auto &F : M){
+        vecF.push_back(&F);
+    }
+
+    for (auto &F : vecF) {
+        //outs() << "==" << F->getName() << '\n';
 
         // skip empty function
-        if (F.empty() && !F.isMaterializable())
+        if (F->empty() && !F->isMaterializable())
 			continue;
 
-        // build blockRegCnt
+        // collect pairs <estimate reg count, BasicBlock *>
+        vector<pair<unsigned, BasicBlock *>> blockRegCnt;
         blockRegCnt.clear();
-        BasicBlock& EB = F.getEntryBlock();
-        countRegs(&EB, 0);
+        for (auto &BB : *F){
+            unsigned cnt = 0;
+            for(auto &I : BB){
+                if (I.hasName()
+                    || (!I.hasName() && !I.getType()->isVoidTy()))
+                    cnt++;
+            }
+            blockRegCnt.push_back(make_pair(cnt, &BB));
+        }
+        // sort by cnt desc.
+        sort(blockRegCnt);
+        reverse(blockRegCnt.begin(), blockRegCnt.end());
 
-        DominatorTree DT(F);
-        BasicBlock *blockToSplit;
+        CodeExtractorAnalysisCache CEAC(*F);
+        DominatorTree DT(*F);
+        BasicBlock *BB, *newBB;
         Instruction *splitAt;
+        unsigned regInstCnt;
         
         for(auto p : blockRegCnt){
-            // outs() << p.first->getName() << "\t\t" << p.second << '\n';
-            if(p.second < THRESHOLD_REGNO){
-                // outs() << "Not over threshold\n";
-                continue;
-            }
-            // find a block that crosses the threshold count
-            blockToSplit = p.first;
-            bool split = false;
-            visit.clear();
-            // move to the instruction that exactly hits the threshold
-            unsigned step = p.second - THRESHOLD_REGNO;
-            BasicBlock::iterator it = blockToSplit->end();
-            for(auto start=blockToSplit->begin();
-                it!=start && step > 0; it--, step--);
-            if(it == blockToSplit->end()) it--;
-            // from that instruction, test each instruction with domReachNoLoop
-            for(auto end=blockToSplit->end(); it!=end; it++){
-                Instruction *I = &*it;
-                if(I->getType()->isVoidTy()) continue;
+            //outs() << p.first << " " << p.second->getName() << '\n';
 
-                Value *V = dyn_cast<Value>(I);
-                // outs() << "Check " << I->getName() << '\n';
-                if(domReachNoLoop(I, blockToSplit, DT)){
-                    // split here
-                    splitAt = I;
-                    outs() << "Split point: ";
-                    outs() << I->getName() << '\n';
-                    split = true;
+            // only consider blocks going over threshold
+            if((regInstCnt = p.first) < THR_CNT){
+                break;
+            }
+
+            BB = p.second;
+            set<Value *> newArgs;
+            splitAt = nullptr;
+            bool doOutline = false;
+
+            // scan instructions backwards
+            for(auto itr = --BB->end(),
+                    start = BB->getFirstInsertionPt();
+                    itr != start; itr--){
+                Instruction *I = &*itr;
+                //outs() << "I: " << I->getNameOrAsOperand() << "\n";
+                if(!I || I->getType()->isVoidTy()){
+                    //outs() << "Skip I\n";
+                    continue;
+                }
+
+                // test split
+                newBB = BB->splitBasicBlock(I);
+                // I is now in the outline region
+                newArgs.erase(I);
+
+                for(auto &U : I->operands()){
+                    if(!U) continue;
+                    Value *V = U.get();
+                    if(!V) continue;
+                    //outs() << "V: " << V->getNameOrAsOperand() << "\n";
+
+                    // args for original func must be passed as arg
+                    if(isa<Argument>(V)){
+                        //outs() << "Arg\n";
+                        newArgs.insert(V);
+                    }
+                    // instructions out of outline region must be passed as arg
+                    else if(isa<Instruction>(V)){
+                        //outs() << "Inst\n";
+                        Instruction *VI = dyn_cast<Instruction>(V);
+                        if(!VI && VI->getParent() != newBB){
+                            newArgs.insert(V);
+                        }
+                    }
+                }
+                // outs() << "New Args: " << newArgs.size() << '\n';
+                // for(auto V : newArgs)
+                //     outs() << V->getNameOrAsOperand() << " ";
+                // outs() << '\n';
+
+                // undo the test split
+                MergeBlockIntoPredecessor(newBB);
+                newBB = nullptr;
+
+                // we now have enough arg
+                if(newArgs.size() > ARGMAX){
+                    doOutline = true;
                     break;
                 }
+                // update split point
+                splitAt = I;
             }
-            // this block cannot be split
-            if(!split) continue;
 
-            // build prevValues from the split point
-            visit.clear();
-            visit.push_back(blockToSplit);
-            prevValues.clear();
-            for(auto &I : *blockToSplit){
-                if(I.comesBefore(splitAt))
-                    prevValues.push_back(dyn_cast<Value>(&I));
+            // perform function outlining
+            if(doOutline && splitAt){
+                newBB = BB->splitBasicBlock(splitAt);
+                Function *newF = CodeExtractor(newBB).extractCodeRegion(CEAC);
+                //outs() << "Split " << newF->getName() << " from " << F->getName() << '\n';
             }
-            for(auto *pred : predecessors(blockToSplit))
-                gatherPrevValues(pred);
-
-            for(auto *V : prevValues)
-                outs() << V->getNameOrAsOperand() << '\n';
-
         }
     }
-    return PreservedAnalyses::none();
+
+    // Erase auto-generated calls to
+    // @llvm.lifetime.start.p0i8 and @llvm.lifetime.end.p0i8
+    for(auto &F : M){
+        vector<Instruction *> toErase;
+        for(auto &BB : F){
+            for(auto &I: BB){
+                CallInst *CI = dyn_cast<CallInst>(&I);
+                if(!CI) continue;
+                Function *CF = CI->getCalledFunction();
+                if (CF->isIntrinsic() && !CF->getInstructionCount())
+                    toErase.push_back(&I);
+            }
+        }
+        for(auto &I : toErase)
+            I->eraseFromParent();
+    }
+    return PreservedAnalyses::all();
 }
 }
