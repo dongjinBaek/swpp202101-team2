@@ -16,6 +16,7 @@
 
 #include <string>
 #include <vector>
+#include <set>
 
 using namespace llvm;
 using namespace std;
@@ -36,6 +37,7 @@ private:
     vector<Instruction *> InstsToRemove;
     void changeUseOfGEPToSwitch(GetElementPtrInst *, Function &,FunctionCallee &);
     bool canChangeAlloca2Reg(AllocaInst *);
+    bool usedInCallInst(Instruction *,set<Instruction *> &);
 };
 }
 

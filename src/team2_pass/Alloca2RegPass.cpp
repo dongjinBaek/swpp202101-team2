@@ -11,6 +11,9 @@ using namespace llvm::PatternMatch;
 namespace team2_pass {
 
 PreservedAnalyses Alloca2RegPass::run(Module &M, ModuleAnalysisManager &MAM) {
+  Regs = vector<LoadInst *>();
+  InstsToRemove = vector<Instruction *>();
+  cnt =0;
   for (auto &F : M) {
     for (auto &BB : F) {
       for (auto &I : BB) {
@@ -117,7 +120,28 @@ void Alloca2RegPass::changeUseOfGEPToSwitch(GetElementPtrInst *GEPI, Function &F
 
 bool Alloca2RegPass::canChangeAlloca2Reg(AllocaInst *AI) {
   Type *AT = AI->getAllocatedType();
-  return AT->isArrayTy() && (n = AT->getArrayNumElements()) <= 10 && AT->getArrayElementType()->isIntegerTy();
+  std::set<Instruction *> v;
+  return AT->isArrayTy() && (n = AT->getArrayNumElements()) <= 10 
+                 && AT->getArrayElementType()->isIntegerTy() && !usedInCallInst(AI, v);
+}
+
+bool Alloca2RegPass::usedInCallInst(Instruction *I, set<Instruction *> &v) {
+  if (v.find(I) != v.end()) return false;
+  v.insert(I);
+  for (auto it = I->user_begin(); it != I->user_end(); it++) {
+    if (auto *UI = dyn_cast<Instruction>(*it)) {
+      if (isa<LoadInst>(UI) || isa<StoreInst>(UI)) {
+        continue;
+      }
+      else if (isa<CallInst>(UI)) {
+        return true;
+      }
+      else if (usedInCallInst(UI, v)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 
