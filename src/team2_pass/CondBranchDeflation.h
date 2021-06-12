@@ -26,6 +26,7 @@ replace the branch with an equivalent switch instruction.
 #include "llvm/Support/raw_ostream.h"
 
 #include<vector>
+#include<map>
 #include<algorithm>
 
 using namespace llvm;
@@ -38,6 +39,7 @@ public:
 };
 
 extern vector<StringRef> v;
+extern map<StringRef, bool> m;
 }
 
 #endif 

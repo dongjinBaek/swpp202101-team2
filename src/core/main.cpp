@@ -10,6 +10,7 @@
 #include "../team2_pass/ArithmeticPass.h"
 #include "../team2_pass/IntegerEqPropagation.h"
 #include "../team2_pass/Malloc2DynAlloca.h"
+#include "../team2_pass/Alloca2RegPass.h"
 #include "../team2_pass/RemoveLoopMetadata.h"
 #include "../team2_pass/Vectorize.h"
 #include "../team2_pass/ExtractFromLoopPass.h"
@@ -119,6 +120,10 @@ int main(int argc, char *argv[]) {
   if (shouldUsePass("Malloc2DynAllocaPass")) {
     MPM.addPass(Malloc2DynAllocaPass());
   }
+
+  if (shouldUsePass("Alloca2RegPass")) {
+    MPM.addPass(Alloca2RegPass());
+  }
   
   if (shouldUsePass("ExtractFromLoopPass")) {
     FunctionPassManager FPM;
@@ -179,6 +184,8 @@ int main(int argc, char *argv[]) {
 
   MPM.run(*M, MAM);
 
+  outs() << *M;
+
   SplitSelfLoopPass().run(*M, MAM);
   UnfoldVectorInstPass().run(*M, MAM);
   AddressArgCastPass().run(*M, MAM);
@@ -187,7 +194,7 @@ int main(int argc, char *argv[]) {
   RegisterSpillPass().run(*M, MAM);
 
   // use this for debugging
-  outs() << *M;
+  // outs() << *M;
 
   // execute backend to emit assembly
   Backend B(optOutput, optPrintProgress);
