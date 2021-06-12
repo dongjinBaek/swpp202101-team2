@@ -319,7 +319,7 @@ void VectorizePass::sinkAllLoadUsers(BasicBlock &BB) {
     vector<Instruction *> users;
     for(auto it = LI->user_begin(); it != LI->user_end(); it++) {
       Instruction *UserI = dyn_cast<Instruction>(*it);
-      if (UserI->getParent() == &BB)
+      if (UserI->getParent() == &BB && LI->comesBefore(UserI))
         users.push_back(UserI);
     }
 
