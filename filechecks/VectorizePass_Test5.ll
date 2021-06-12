@@ -7,7 +7,7 @@ target triple = "x86_64-unknown-linux-gnu"
 define dso_local i32 @main() #0 {
 ; CHECK: main
 ; CHECK: vstore 4
-; CHECK: vload 4
+
 entry:
   %call = call noalias i8* @malloc(i64 96) #4
   %0 = bitcast i8* %call to i64*

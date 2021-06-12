@@ -9,7 +9,6 @@ define dso_local i32 @main() #0 {
 ; CHECK: vstore 4
 ; CHECK: vload 4
 ; CHECK: vstore 8
-; CHECK: vload 8
 
 entry:
   %call = call noalias i8* @malloc(i64 96) #4

@@ -15,23 +15,21 @@
 #include "../team2_pass/Vectorize.h"
 #include "../team2_pass/ExtractFromLoopPass.h"
 #include "../team2_pass/IROutliner.h"
+#include "../team2_pass/SetIsNoInline.h"
+#include "../team2_pass/Pipeline.h"
 #include "../team2_pass/ScaleToInt64.h"
 
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/IR/PassManager.h"
-#include "llvm/Transforms/InstCombine/InstCombine.h"
-#include "llvm/Transforms/Scalar/SimplifyCFG.h"
-#include "llvm/Transforms/Scalar/GVN.h"
-#include "llvm/Transforms/Scalar/CorrelatedValuePropagation.h"
 
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/CommandLine.h"
 
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
-#include "llvm/Transforms/Scalar/DCE.h"
+#include "llvm/Transforms/Scalar/GVN.h"
 
 #include "llvm/Transforms/Scalar/LoopInstSimplify.h"
 #include "llvm/Transforms/Scalar/LoopPassManager.h"
@@ -93,7 +91,6 @@ int main(int argc, char *argv[]) {
 
   // execute IR passes
   ModulePassManager MPM;
-  CGSCCPassManager CPM;
 
   LoopAnalysisManager LAM;
   FunctionAnalysisManager FAM;
@@ -109,21 +106,15 @@ int main(int argc, char *argv[]) {
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
+  if (shouldUsePass("SetIsNoInlinePass")) {
+    MPM.addPass(buildPreSimplificationPipeline());
+    MPM.addPass(SetIsNoInlinePass());
+    MPM.addPass(buildInlinerPipeline());
+    MPM.addPass(buildPostSimplificationPipeline());
+  }
+
   if (shouldUsePass("ScaleToInt64Pass")) {
     MPM.addPass(ScaleToInt64Pass());
-  }
-
-  if (shouldUsePass("InlinerPass")) {
-    CPM.addPass(InlinerPass());
-    MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(std::move(CPM)));
-  }
-  
-  if (shouldUsePass("Malloc2DynAllocaPass")) {
-    MPM.addPass(Malloc2DynAllocaPass());
-  }
-
-  if (shouldUsePass("Alloca2RegPass")) {
-    MPM.addPass(Alloca2RegPass());
   }
   
   if (shouldUsePass("ExtractFromLoopPass")) {
@@ -166,7 +157,19 @@ int main(int argc, char *argv[]) {
   if (shouldUsePass("CondBranchDeflationPass")) {
     MPM.addPass(CondBranchDeflationPass());
   }
+  
+  if (shouldUsePass("Malloc2DynAllocaPass")) {
+    MPM.addPass(Malloc2DynAllocaPass());
+  }
 
+  if (shouldUsePass("Alloca2RegPass")) {
+    MPM.addPass(Alloca2RegPass());
+  }
+  
+  if (shouldUsePass("IROutlinerPass")) {
+    MPM.addPass(IROutlinerPass());
+  }
+  
   if (shouldUsePass("ArithmeticPass")) {
     FunctionPassManager FPM2;
 
@@ -179,13 +182,7 @@ int main(int argc, char *argv[]) {
     MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM2)));
   }
 
-  if (shouldUsePass("IROutlinerPass")) {
-    MPM.addPass(IROutlinerPass());
-  }
-
   MPM.run(*M, MAM);
-
-  outs() << *M;
 
   SplitSelfLoopPass().run(*M, MAM);
   UnfoldVectorInstPass().run(*M, MAM);
@@ -195,7 +192,7 @@ int main(int argc, char *argv[]) {
   RegisterSpillPass().run(*M, MAM);
 
   // use this for debugging
-  // outs() << *M;
+  outs() << *M;
 
   // execute backend to emit assembly
   Backend B(optOutput, optPrintProgress);
