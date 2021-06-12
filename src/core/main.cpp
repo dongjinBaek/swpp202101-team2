@@ -15,6 +15,7 @@
 #include "../team2_pass/Vectorize.h"
 #include "../team2_pass/ExtractFromLoopPass.h"
 #include "../team2_pass/IROutliner.h"
+#include "../team2_pass/ScaleToInt64.h"
 
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
@@ -107,6 +108,10 @@ int main(int argc, char *argv[]) {
   PB.registerFunctionAnalyses(FAM);
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+  if (shouldUsePass("ScaleToInt64Pass")) {
+    MPM.addPass(ScaleToInt64Pass());
+  }
 
   if (shouldUsePass("InlinerPass")) {
     CPM.addPass(InlinerPass());
