@@ -11,9 +11,6 @@ using namespace llvm::PatternMatch;
 namespace team2_pass {
 
 PreservedAnalyses Alloca2RegPass::run(Module &M, ModuleAnalysisManager &MAM) {
-            Regs = vector<LoadInst *>();
-            InstsToRemove = vector<Instruction *>();
-            cnt =0;
   for (auto &F : M) {
     for (auto &BB : F) {
       for (auto &I : BB) {
@@ -37,12 +34,13 @@ PreservedAnalyses Alloca2RegPass::run(Module &M, ModuleAnalysisManager &MAM) {
                 if (GEPI) {
                   changeUseOfGEPToSwitch(GEPI, F, S);
                 } else {
-                  assert("use not GEP!!");
+                  assert(false && "use not GEP!!");
                 }
             }
             for (auto *I : InstsToRemove) {
               I->eraseFromParent();
             }
+            return PreservedAnalyses::none();
           }
         }
       }
@@ -65,8 +63,7 @@ void Alloca2RegPass::changeUseOfGEPToSwitch(GetElementPtrInst *GEPI, Function &F
       for (int i=0; i<n; i++) {
         auto *SwitchBB = BasicBlock::Create(F.getContext(), "splitted_bb"+to_string(cnt++), &F, DownBB);
         IRBuilder<> builder(SwitchBB);
-        auto *Br = BranchInst::Create(DownBB);
-        builder.Insert(Br);
+        builder.Insert(BranchInst::Create(DownBB));
         SwitchBBs.push_back(SwitchBB);
       }
       // change terminator inst of upper splitted block to switch
@@ -78,7 +75,7 @@ void Alloca2RegPass::changeUseOfGEPToSwitch(GetElementPtrInst *GEPI, Function &F
       }
       // insert phi node at the start of downward splitted block
       PHINode *Phi = PHINode::Create(LI->getType(), n,
-              "load.phi", DownBB->getFirstNonPHI());
+              "load.phi" + to_string(cnt++), DownBB->getFirstNonPHI());
       for (int i=0; i<n; i++) {
         Phi->addIncoming(Regs[i], SwitchBBs[i]);
       }
