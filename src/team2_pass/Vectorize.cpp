@@ -168,7 +168,9 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
       // function call can access memory
       else if (CI) {
         Function *F = CI->getCalledFunction();
-        if (isBaseLoad && F->onlyReadsMemory() || !doesAccessMemory(CI))
+        StringRef name = F->getName();
+        if (isBaseLoad && F->onlyReadsMemory() ||
+            (!doesAccessMemory(CI) || name == "read" || name == "write"))
           continue;
         else {
           LLVM_DEBUG(dbgs() << *CI << " calls memory accessing function\n";);
@@ -407,9 +409,7 @@ Instruction *VectorizePass::findNextMemoryInstruction(Instruction *I) {
 
 bool VectorizePass::doesAccessMemory(CallInst *CI) {
   Function *F = CI->getCalledFunction();
-  string Fname = F->getName().str();
-  bool writeOrRead = Fname == "write" || Fname == "read";
-  return !(F->doesNotAccessMemory() || writeOrRead);
+  return !F->doesNotAccessMemory();
 }
 
 PreservedAnalyses VectorizePass::run(Module &M, ModuleAnalysisManager &MAM) {
