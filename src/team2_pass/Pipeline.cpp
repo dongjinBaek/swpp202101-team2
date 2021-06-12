@@ -3,7 +3,7 @@
 using namespace llvm;
 using namespace std;
 
-FunctionPassManager buildFunctionSimplificationPipeline() {
+static FunctionPassManager buildFunctionSimplificationPipeline() {
   FunctionPassManager FPM;
   FPM.addPass(SROA());
   FPM.addPass(EarlyCSEPass(true));
@@ -53,7 +53,7 @@ FunctionPassManager buildFunctionSimplificationPipeline() {
   return FPM;
 }
 
-ModulePassManager buildPreSimplificationPipeline() {
+ModulePassManager buildModuleSimplificationPipeline() {
   ModulePassManager MPM(true);
   MPM.addPass(InferFunctionAttrsPass());
 
@@ -89,10 +89,20 @@ ModuleInlinerWrapperPass buildInlinerPipeline() {
   return MIWP;
 }
 
-ModulePassManager buildPostSimplificationPipeline() {
+ModulePassManager buildModuleOptimizationPipeline() {
   ModulePassManager MPM;
   MPM.addPass(GlobalOptPass());
   MPM.addPass(GlobalDCEPass());
+  MPM.addPass(ReversePostOrderFunctionAttrsPass());
+  MPM.addPass(RequireAnalysisPass<GlobalsAA, Module>());
+
+  FunctionPassManager OptimizePM;
+  OptimizePM.addPass(createFunctionToLoopPassAdaptor(
+      LoopRotatePass(true, false), true, false, false));
+  OptimizePM.addPass(LoopLoadEliminationPass());
+  OptimizePM.addPass(InstCombinePass());
+  OptimizePM.addPass(SimplifyCFGPass(SimplifyCFGOptions().needCanonicalLoops(false)));
+  MPM.addPass(createModuleToFunctionPassAdaptor(move(OptimizePM)));
 
   return MPM;
 }

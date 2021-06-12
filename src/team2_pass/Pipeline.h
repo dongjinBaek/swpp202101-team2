@@ -24,6 +24,7 @@
 #include "llvm/Transforms/Scalar/LICM.h"
 #include "llvm/Transforms/Scalar/LoopDeletion.h"
 #include "llvm/Transforms/Scalar/LoopInstSimplify.h"
+#include "llvm/Transforms/Scalar/LoopLoadElimination.h"
 #include "llvm/Transforms/Scalar/LoopPassManager.h"
 #include "llvm/Transforms/Scalar/LoopRotation.h"
 #include "llvm/Transforms/Scalar/LoopSimplifyCFG.h"
@@ -44,7 +45,6 @@
 
 using namespace llvm;
 
-FunctionPassManager buildFunctionSimplificationPipeline();
-ModulePassManager buildPreSimplificationPipeline();
+ModulePassManager buildModuleSimplificationPipeline();
 ModuleInlinerWrapperPass buildInlinerPipeline();
-ModulePassManager buildPostSimplificationPipeline();
+ModulePassManager buildModuleOptimizationPipeline();
