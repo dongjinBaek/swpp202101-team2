@@ -22,6 +22,7 @@ using namespace team2_pass;
 namespace team2_pass {
 
 vector<StringRef> v;	// visit stack
+map<StringRef, bool> m;
 
 /* recursively called on successors */
 /* traverse the CFG depth-first, post-order */
@@ -33,7 +34,9 @@ static bool visitAndTransform(BasicBlock *BB) {
 		//outs() << "Found cycle\n";
 		return true;
 	}
-
+	if (m.find(BB->getName()) != m.end()) {
+		return m[BB->getName()];
+	}
 	bool hasRecursiveCall = false;
 	for (auto &I : *BB) {
 		CallInst *CI = dyn_cast<CallInst>(&I);
@@ -48,7 +51,7 @@ static bool visitAndTransform(BasicBlock *BB) {
 	if (isa<ReturnInst>(TI)) {										// terminates with ret:
 		//outs() << "Return\n";
 		//outs() << "Leaving " << BB->getName() << '\n';
-		return hasRecursiveCall;									// not repeatable
+		return m[BB->getName()] = hasRecursiveCall;									// not repeatable
 	}
 	if (isa<SwitchInst>(TI)) {										// terminates with switch:
 		//outs() << "Switch\n";
@@ -61,7 +64,7 @@ static bool visitAndTransform(BasicBlock *BB) {
 		assert(v.back() == BB->getName());
 		v.pop_back();
 		//outs() << "Leaving " << BB->getName() << '\n';
-		return ret || hasRecursiveCall;
+		return m[BB->getName()] = ret || hasRecursiveCall;
 	}
 
 	BranchInst *BI = dyn_cast<BranchInst>(TI);
@@ -74,7 +77,7 @@ static bool visitAndTransform(BasicBlock *BB) {
 		assert(v.back() == BB->getName());
 		v.pop_back();
 		//outs() << "Leaving " << BB->getName() << '\n';
-		return ret || hasRecursiveCall;								// repeatable iff its successor is
+		return m[BB->getName()] = ret || hasRecursiveCall;								// repeatable iff its successor is
 	}
 	if (BI->isConditional()){										// terminates with brC:
 		//outs() << "Cond\n";
@@ -119,10 +122,10 @@ static bool visitAndTransform(BasicBlock *BB) {
 		assert(v.back() == BB->getName());
 		v.pop_back();
 		//outs() << "Leaving " << BB->getName() << '\n';
-		return mayRepeatTrue || mayRepeatFalse || hasRecursiveCall;
+		return m[BB->getName()] = mayRepeatTrue || mayRepeatFalse || hasRecursiveCall;
 	}
 	//outs() << "Unreachable!!\n";
-	return false;													// no other type of terminator; unreachable
+	return m[BB->getName()] = false;													// no other type of terminator; unreachable
 }
 
 PreservedAnalyses CondBranchDeflationPass::run(Module& M, ModuleAnalysisManager& MAM) {
@@ -132,6 +135,7 @@ PreservedAnalyses CondBranchDeflationPass::run(Module& M, ModuleAnalysisManager&
 		if (F.empty() && !F.isMaterializable())						// Skip functions that are declared but not defined (e.g. read, write)
 			continue;
 		v.clear();
+		m.clear();
 		BasicBlock& EB = F.getEntryBlock();
 		visitAndTransform(&EB);
     }

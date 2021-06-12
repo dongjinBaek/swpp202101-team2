@@ -52,9 +52,15 @@ Difference VectorizePass::getDifference(Value *V1, Value *V2) {
   // gep
   GetElementPtrInst *GEP1 = dyn_cast<GetElementPtrInst>(V1);
   GetElementPtrInst *GEP2 = dyn_cast<GetElementPtrInst>(V2);
-  if (GEP1 && GEP2 && GEP1->getNumOperands() == 2 && GEP2->getNumOperands() == 2) {
-    if (GEP1->getOperand(0) == GEP2->getOperand(0)) {
+  if (GEP1 && GEP2) {
+    if (GEP1->getNumOperands() == 2 && GEP2->getNumOperands() == 2 &&
+        GEP1->getOperand(0) == GEP2->getOperand(0)) {
       return getDifference(GEP1->getOperand(1), GEP2->getOperand(1));
+    }
+    else if (GEP1->getNumOperands() == 3 && GEP2->getNumOperands() == 3 &&
+             GEP1->getOperand(0) == GEP2->getOperand(0) &&
+             GEP1->getOperand(1) == GEP2->getOperand(1)) {
+      return getDifference(GEP1->getOperand(2), GEP2->getOperand(2));
     }
   }
 
@@ -85,6 +91,8 @@ Difference VectorizePass::getDifference(Value *V1, Value *V2) {
 }
 
 void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
+  sinkAllLoadUsers(BB);
+
   Instruction *BaseI = nullptr;
   Instruction *NextBaseI = findNextBaseInstruction(BB.getFirstNonPHI());
 
@@ -101,15 +109,17 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
                if (FirstUser) dbgs() << "  First User - " << *FirstUser << '\n';);
 
     SmallVector<Instruction *, 8> VectInsts;
-    SmallVector<int, 8> Offsets;
-    Offsets.push_back(0);
+    SmallVector<int, 8> VOffsets;     // offsets to vectorize
+    SmallVector<int> AOffsets;        // all offsets appeared
+    VOffsets.push_back(0);
+    AOffsets.push_back(0);
     VectInsts.push_back(BaseI);
 
     // loop until vectorize condition is met, or end of basicblock
     Instruction *CurI = BaseI->getNextNonDebugInstruction();
     for (; CurI; CurI = CurI->getNextNonDebugInstruction()) {
       if (VectInsts.size() >= 8) {
-        NextBaseI = findNextBaseInstruction(CurI);
+        NextBaseI = NextBaseI ? NextBaseI : findNextBaseInstruction(CurI);
         break;
       }
 
@@ -120,7 +130,7 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
       if (LI || SI) {
         Value *CurPointer = LI ? CurI->getOperand(0) : CurI->getOperand(1);
         Difference diff = getDifference(CurPointer, BasePointer);
-        bool offsetExist = find(Offsets.begin(), Offsets.end(), diff.value) != Offsets.end();
+        bool offsetExist = find(AOffsets.begin(), AOffsets.end(), diff.value) != AOffsets.end();
         LLVM_DEBUG(dbgs() << "  Inst: " << *CurI << ", known: " << diff.known << ", value: " 
                    << diff.value << "  offsetExist: " << offsetExist << "\n";);
 
@@ -129,45 +139,46 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
             FirstUser->getParent() == CurI->getParent() && 
             FirstUser->comesBefore(CurI)) {
           LLVM_DEBUG(dbgs() << "  CurI is after first user of BaseI" << "\n");
-          NextBaseI = CurI;
+          NextBaseI = NextBaseI ? NextBaseI : CurI;
           break;
         }
 
         // known-diff load/stores can be vectorized, except some case
         if (diff.known) {
           if (offsetExist) {
-            NextBaseI = CurI;
+            NextBaseI = NextBaseI ? NextBaseI : CurI;
             break;
           }
 
+          AOffsets.push_back(diff.value);
           if (isBaseLoad && LI || !isBaseLoad && SI) {
             VectInsts.push_back(CurI);
-            Offsets.push_back(diff.value);
+            VOffsets.push_back(diff.value);
+          }
+          else {
+            NextBaseI = NextBaseI ? NextBaseI : CurI;
           }
         }
         // unknown-diff load/stores stops vectorize
         else {
-          NextBaseI = CurI;
+          NextBaseI = NextBaseI ? NextBaseI : CurI;
           break;
         }
       }
       // function call can access memory
       else if (CI) {
         Function *F = CI->getCalledFunction();
-        string Fname = F->getName().str();
-        bool writeOrRead = (Fname == "write" || Fname == "read");
-
-        if (isBaseLoad && F->onlyReadsMemory() || writeOrRead)
+        if (isBaseLoad && F->onlyReadsMemory() || !doesAccessMemory(CI))
           continue;
         else {
           LLVM_DEBUG(dbgs() << *CI << " calls memory accessing function\n";);
-          NextBaseI = findNextBaseInstruction(CurI);
+          NextBaseI = NextBaseI ? NextBaseI : findNextBaseInstruction(CurI);
           break;
         }
       }
     }
     if (VectInsts.size() > 1) {
-      Vectorize(VectInsts, Offsets, isBaseLoad);
+      Vectorize(VectInsts, VOffsets, isBaseLoad);
     }
   }
 }
@@ -190,6 +201,10 @@ Instruction *VectorizePass::findNextBaseInstruction(Instruction *I) {
 }
 
 void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVector<int, 8> &Offsets, bool isLoad) {
+  int vectorSize = VectInsts.size();
+
+  assert (vectorSize == Offsets.size() && "Offset size should match VectInst size");
+  assert (vectorSize >= 2 && vectorSize <= 8 && "VectInst size range is 2 <= size <= 8");
   LLVM_DEBUG(
     dbgs() << "VCT: Instructions to vectorize - \n";
     for (int i = 0; i < VectInsts.size(); i++) {
@@ -201,44 +216,70 @@ void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVec
     dbgs() << "\n";
     dbgs() << "\n";
   );
-  int vectorSize = VectInsts.size();
-  if (!(vectorSize == 2 || vectorSize == 4 || vectorSize == 8)) {
-    LLVM_DEBUG(dbgs() << "VCT: vectorSize is not 2, 4, or 8\n";);
-    return;
+
+  // sort in offset order, adjust offset
+  Instruction *InsertAfter = VectInsts.back();
+  SmallVector<pair<int, Instruction *>, 8> OffsetInstPairs;
+  for (int i = 0; i < vectorSize; i++) {
+    OffsetInstPairs.push_back(make_pair(Offsets[i], VectInsts[i]));
+  }
+  sort(OffsetInstPairs);
+  int baseOffset = OffsetInstPairs[0].first;
+  for (int i = 0; i < vectorSize; i++) {
+    VectInsts[i] = OffsetInstPairs[i].second;
+    Offsets[i] = OffsetInstPairs[i].first - baseOffset;
   }
 
-  for (int i = 0; i < vectorSize; i++)
-    if (Offsets[i] != i) {
-      LLVM_DEBUG(dbgs() << "VCT: offsets are not in order\n";);
-      return;
+  // build mask
+  int offsetRange = Offsets[vectorSize-1] - Offsets[0];
+  int targetSize, mask;
+  int i_to_idx[8], mask_arr[8] = {1, 1, 1, 1, 1, 1, 1, 1};
+  assert (offsetRange < 8 && "Offsets should fit in 8 bytes to vectorize");
+  if (offsetRange == 1) targetSize = 2;
+  else if (offsetRange < 4) targetSize = 4;
+  else targetSize = 8;
+  mask = (1 << targetSize) - 1;
+  for (int i = 0, idx = 0; i < targetSize; i++) {
+    if (idx == vectorSize || Offsets[idx] != i) {
+      mask ^= 1 << i;
+      mask_arr[i] = 0;
     }
+    else {
+      i_to_idx[i] = idx;
+      idx++;
+    }
+  }
 
   // make call instruction(s) and replace uses if needed
-  Instruction *InsertAfter = VectInsts.back();
   Value *Pointer = isLoad ? VectInsts[0]->getOperand(0) : VectInsts[0]->getOperand(1);
   if (isLoad) {
-    Value *Args[] = {Pointer, ConstantInt::get(Int64Ty, (1 << vectorSize) - 1)};
-    CallInst *CVLoad = CallInst::Create(VLoads[vectorSize], Args);
+    Value *Args[] = {Pointer, ConstantInt::get(Int64Ty, mask)};
+    CallInst *CVLoad = CallInst::Create(VLoads[targetSize], Args);
     CVLoad->insertAfter(InsertAfter);
 
     Instruction *LastInsert = CVLoad;
-    for (int i = 0; i < vectorSize; i++) {
-      Value *Args[] = {CVLoad, ConstantInt::get(Int64Ty, i)};
-      CallInst *CExtract = CallInst::Create(ExtractElements[vectorSize], Args);
-      CExtract->insertAfter(LastInsert);
-      LastInsert = CExtract;
+    for (int i = 0; i < targetSize; i++) {
+      if (mask_arr[i]) {
+        Value *Args[] = {CVLoad, ConstantInt::get(Int64Ty, i)};
+        CallInst *CExtract = CallInst::Create(ExtractElements[targetSize], Args);
+        CExtract->insertAfter(LastInsert);
+        LastInsert = CExtract;
 
-      VectInsts[i]->replaceAllUsesWith(CExtract);
+        VectInsts[i_to_idx[i]]->replaceAllUsesWith(CExtract);
+      }
     }
   }
   else {
-    Value *Args[vectorSize + 2];
-    for (int i = 0; i < vectorSize; i++) {
-      Args[i] = VectInsts[i]->getOperand(0);
+    Value *Args[targetSize + 2];
+    for (int i = 0; i < targetSize; i++) {
+      if (mask_arr[i])
+        Args[i] = VectInsts[i_to_idx[i]]->getOperand(0);
+      else
+        Args[i] = ConstantInt::get(Int64Ty, 0);
     }
-    Args[vectorSize] = Pointer;
-    Args[vectorSize + 1] = ConstantInt::get(Int64Ty, (1 << vectorSize) - 1);
-    CallInst *CVStore = CallInst::Create(VStores[vectorSize], ArrayRef<Value *>(Args, vectorSize + 2));
+    Args[targetSize] = Pointer;
+    Args[targetSize + 1] = ConstantInt::get(Int64Ty, mask);
+    CallInst *CVStore = CallInst::Create(VStores[targetSize], ArrayRef<Value *>(Args, targetSize + 2));
 
     CVStore->insertAfter(InsertAfter);
   }
@@ -268,6 +309,107 @@ void VectorizePass::declareFunctions(Module &M) {
   VStores[2] = M.getOrInsertFunction("vstore2", VoidTy, Int64Ty, Int64Ty, Int64PtrTy, Int64Ty);
   VStores[4] = M.getOrInsertFunction("vstore4", VoidTy, Int64Ty, Int64Ty, Int64Ty, Int64Ty, Int64PtrTy, Int64Ty);
   VStores[8] = M.getOrInsertFunction("vstore8", VoidTy, Int64Ty, Int64Ty, Int64Ty, Int64Ty, Int64Ty, Int64Ty, Int64Ty, Int64Ty, Int64PtrTy, Int64Ty);
+}
+
+void VectorizePass::sinkAllLoadUsers(BasicBlock &BB) {
+  for (auto it = BB.begin(); it != BB.end(); it++) {
+    LoadInst *LI = dyn_cast<LoadInst>(&(*it));
+    if (!LI) continue;
+
+    vector<Instruction *> users;
+    for(auto it = LI->user_begin(); it != LI->user_end(); it++) {
+      Instruction *UserI = dyn_cast<Instruction>(*it);
+      if (UserI->getParent() == &BB)
+        users.push_back(UserI);
+    }
+
+    for(auto it = users.begin(); it != users.end(); it++)
+      sinkRecursive(BB, *it);
+  }
+}
+
+// sink given instruction recursively in post-order
+void VectorizePass::sinkRecursive(BasicBlock &BB, Instruction *I) {
+  static set<Instruction *> sinked;
+  if (sinked.find(I) != sinked.end()) return;
+  else sinked.insert(I);
+
+  LLVM_DEBUG(dbgs() << "sinkRecursive: " << BB.getName() << " " << *I << "\n");
+  Instruction *MaxSinkI = BB.getTerminator();
+
+  // sink all children recursively
+  for (auto it = I->user_begin(); it != I->user_end(); it++) {
+    Instruction *UserI = dyn_cast<Instruction>(*it);
+
+    if (UserI->getParent() == &BB && I->comesBefore(UserI)) {
+      sinkRecursive(BB, UserI);
+      MaxSinkI = MaxSinkI->comesBefore(UserI) ? MaxSinkI : UserI;
+    }
+  }
+
+  // find where to sink current instruction if access memory
+  LoadInst *LI = dyn_cast<LoadInst>(I);
+  StoreInst *SI = dyn_cast<StoreInst>(I);
+  CallInst *CI = dyn_cast<CallInst>(I);
+
+  if (LI || SI || (CI && doesAccessMemory(CI))) {
+    // find next user
+    Instruction *NextUI = I->user_empty() ? nullptr : I->user_back();
+    if (NextUI && NextUI->getParent() == &BB)
+      MaxSinkI = MaxSinkI->comesBefore(NextUI) ? MaxSinkI : NextUI;
+
+    // find next unknown-difference or equal pointer memory access
+    Instruction *NextMI = findNextMemoryInstruction(I->getNextNonDebugInstruction());
+    while (NextMI) {
+      LoadInst *NLI = dyn_cast<LoadInst>(NextMI);
+      StoreInst *NSI = dyn_cast<StoreInst>(NextMI);
+      CallInst *NCI = dyn_cast<CallInst>(NextMI);
+
+      if (CI || NCI) break;   // memory accessing call -> unknown-difference
+
+      Value *CurP = LI ? I->getOperand(0) : I->getOperand(1);
+      Value *NextP = NLI ? NextMI->getOperand(0) : NextMI->getOperand(1);
+      Difference d = getDifference(CurP, NextP);
+
+      if (d.known && d.value == 0) break;
+      else if (!d.known) break;
+      else NextMI = findNextMemoryInstruction(NextMI->getNextNonDebugInstruction());
+    }
+    if (NextMI)
+      MaxSinkI = MaxSinkI->comesBefore(NextMI) ? MaxSinkI : NextMI;
+  }
+
+  // sink current instruction
+  I->moveBefore(MaxSinkI);
+}
+
+// find next load/store/call(except 'read' and 'write') instruction including I
+Instruction *VectorizePass::findNextMemoryInstruction(Instruction *I) {
+  Instruction *NextI = nullptr;
+  for (; I; I = I->getNextNonDebugInstruction()) {
+    LoadInst *LI = dyn_cast<LoadInst>(I);
+    StoreInst *SI = dyn_cast<StoreInst>(I);
+    CallInst *CI = dyn_cast<CallInst>(I);
+    if (LI || SI) {
+      NextI = I;
+      break;
+    }
+    if (CI) {
+      Function *F = CI->getCalledFunction();
+      if (doesAccessMemory(CI)) {
+        NextI = I;
+        break;
+      }
+    }
+  }
+  return NextI;
+}
+
+bool VectorizePass::doesAccessMemory(CallInst *CI) {
+  Function *F = CI->getCalledFunction();
+  string Fname = F->getName().str();
+  bool writeOrRead = Fname == "write" || Fname == "read";
+  return !(F->doesNotAccessMemory() || writeOrRead);
 }
 
 PreservedAnalyses VectorizePass::run(Module &M, ModuleAnalysisManager &MAM) {

@@ -10,12 +10,14 @@
 #include "../team2_pass/ArithmeticPass.h"
 #include "../team2_pass/IntegerEqPropagation.h"
 #include "../team2_pass/Malloc2DynAlloca.h"
+#include "../team2_pass/Alloca2RegPass.h"
 #include "../team2_pass/RemoveLoopMetadata.h"
 #include "../team2_pass/Vectorize.h"
 #include "../team2_pass/ExtractFromLoopPass.h"
 #include "../team2_pass/IROutliner.h"
 #include "../team2_pass/SetIsNoInline.h"
 #include "../team2_pass/Pipeline.h"
+#include "../team2_pass/ScaleToInt64.h"
 
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
@@ -97,10 +99,6 @@ int main(int argc, char *argv[]) {
 
   PassBuilder PB;
 
-  // DebugFlag = true;
-  // const char *debugTypes[] = {"vectorize", "loop-unroll"};
-  // setCurrentDebugTypes(debugTypes, 2);
-
   // register all the basic analyses with the managers.
   PB.registerModuleAnalyses(MAM);
   PB.registerCGSCCAnalyses(CGAM);
@@ -115,6 +113,10 @@ int main(int argc, char *argv[]) {
     MPM.addPass(buildPostSimplificationPipeline());
   }
 
+  if (shouldUsePass("ScaleToInt64Pass")) {
+    MPM.addPass(ScaleToInt64Pass());
+  }
+  
   if (shouldUsePass("ExtractFromLoopPass")) {
     FunctionPassManager FPM;
 
@@ -155,11 +157,19 @@ int main(int argc, char *argv[]) {
   if (shouldUsePass("CondBranchDeflationPass")) {
     MPM.addPass(CondBranchDeflationPass());
   }
-
+  
   if (shouldUsePass("Malloc2DynAllocaPass")) {
     MPM.addPass(Malloc2DynAllocaPass());
   }
 
+  if (shouldUsePass("Alloca2RegPass")) {
+    MPM.addPass(Alloca2RegPass());
+  }
+  
+  if (shouldUsePass("IROutlinerPass")) {
+    MPM.addPass(IROutlinerPass());
+  }
+  
   if (shouldUsePass("ArithmeticPass")) {
     FunctionPassManager FPM2;
 
@@ -170,10 +180,6 @@ int main(int argc, char *argv[]) {
     FPM2.addPass(SimplifyCFGPass());
     
     MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM2)));
-  }
-
-  if (shouldUsePass("IROutlinerPass")) {
-    MPM.addPass(IROutlinerPass());
   }
 
   MPM.run(*M, MAM);
