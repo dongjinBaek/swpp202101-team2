@@ -31,6 +31,6 @@ echo "CXX=$1/clang++" >Makefile
 echo "CXXFLAGS=${CXXFLAGS}" >>Makefile
 echo "LDFLAGS=${LDFLAGS}" >>Makefile
 echo "GTESTSRC=${GTESTSRC}" >> Makefile
-echo "FILECHECK_PATH=$1/FileCheck" >> Makefile
+#echo "FILECHECK_PATH=$1/FileCheck" >> Makefile
 echo "LLVM_BIN_PATH=$1" >> Makefile
 cat Makefile.template >>Makefile
