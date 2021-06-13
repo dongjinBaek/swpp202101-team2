@@ -14,6 +14,15 @@ string AssemblyEmitter::name(Value* v) {
         //return the value itself.
         return to_string(dyn_cast<ConstantInt>(v)->getZExtValue());
     }
+    Symbol *symbol = SM->get(v);
+    if (Memory *mem = symbol->castToMemory()) {
+        if (mem->getBase() == TM->gvp())
+            return to_string(204800 + mem->getOffset());
+        else if (mem->getBase() == TM->sgvp())
+            return to_string(102400 - mem->getOffset());
+        else if (mem->getBase() == TM->sp() && mem->getOffset() == 0)
+            return "sp";
+    }
     return SM->get(v)->getName();
 }
 
@@ -37,6 +46,9 @@ string AssemblyEmitter::emitCopy(Instruction* v, Value* op) {
         }
         else if (mem->getBase() == TM->sgvp())
             return emitBinary(v, "sub", "102400", to_string(mem->getOffset()));
+        else if (mem->getBase() == TM->sp())
+            return emitBinary(v, "add", v->getFunction()->getName() == "main" ?
+                                "r32" : "sp", to_string(mem->getOffset()));
         return emitBinary(v, "add", mem->getBase()->getName(), to_string(mem->getOffset()));
     }
     return emitBinary(v, "mul", name(op), "1");
@@ -208,36 +220,8 @@ void AssemblyEmitter::visitSExtInst(SExtInst& I) {
     *fout << emitBinary(&I, "sdiv", name(&I), to_string(1llu<<(afterBits-beforeBits)));
 }
 void AssemblyEmitter::visitPtrToIntInst(PtrToIntInst& I) {
-    Value* ptr = I.getPointerOperand();
-    Symbol* symbol = SM->get(ptr);
-    //if pointer operand is a memory value(GV or alloca),
-    if(symbol) {
-        if(Memory* mem = symbol->castToMemory()) {
-            if(mem->getBase() == TM->sp()) {
-                string base = I.getParent()->getParent()->getName() == "main" ? "r32" : "sp";
-                *fout << emitBinary(&I, "add", base, to_string(mem->getOffset()));
-            }
-            else if(mem->getBase() == TM->gvp()) {
-                *fout << emitBinary(&I, "add", "204800", to_string(mem->getOffset()));
-            }
-            else if (mem->getBase() == TM->sgvp())
-                *fout << emitBinary(&I, "sub", "102400", to_string(mem->getOffset()));
-            else assert(false && "base of memory pointers should be sp or gvp");
-        }
-        //else a pointer stored in register,
-        else if(Register* reg = symbol->castToRegister()) {
-            //if from and to values are stored in a different source, copy.
-            if(SM->get(&I) != SM->get(I.getOperand(0))) {
-                *fout << emitCopy(&I, I.getOperand(0));
-            }
-        }
-        return;
-    }
-    //else ptr is null
-    if(isa<ConstantPointerNull>(ptr)) {
-        *fout << emitBinary(&I, "mul", "0", "0");
-    }
-    else assert(false && "pointer of a memory operation should have an appropriate symbol assigned");
+    if(SM->get(&I) != SM->get(I.getPointerOperand()))
+        *fout << emitCopy(&I, I.getPointerOperand());
 }
 void AssemblyEmitter::visitIntToPtrInst(IntToPtrInst& I) {
     //If coallocated to the same registers, do nothing.

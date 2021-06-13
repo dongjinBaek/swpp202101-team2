@@ -510,12 +510,8 @@ map<Function*, unsigned> Backend::processAlloca(Module& M, SymbolMap& SM) {
     //acc: total stack accumulation of a function before an alloca inst.
     unsigned acc = 0;
     for(Instruction& I : entry) {
-
       AllocaInst* alloca = dyn_cast<AllocaInst>(&I);
       if(alloca) {
-        //Update SymbolMap.
-        Memory* stackaddr = new Memory(TM.sp(), acc);
-        SM.set(alloca, stackaddr);
         //Update acc
         unsigned size = getAccessSize(alloca->getAllocatedType());
         acc += (size + 7) / 8 * 8;
@@ -533,46 +529,6 @@ map<Function*, unsigned> Backend::processAlloca(Module& M, SymbolMap& SM) {
 //---------------------------------------------------------------
 
 SymbolMap::SymbolMap(Module* M, TargetMachine& TM, RegisterGraph& RG) : M(M), TM(TM) {
-  //Initiate Machine symbols.
-
-  for(Function& F : *M) {
-    assert(F.hasName() && "All functions in module should be named");
-    symbolTable[&F] = new Func(F.getName().str());
-
-    unsigned unnamedBB = 0;
-
-    //Assign registers for arguments
-    int i = 0;
-    for(Value& arg : F.args()) {
-      symbolTable[&arg] = TM.arg(i);
-      i++;
-    }
-
-    //Assign registers for instructions
-    for(BasicBlock& BB : F) {
-
-      symbolTable[&BB] = new Block(BB.hasName() ? BB.getName().str() : "_defaultBB" + to_string(unnamedBB++));
-
-      for(Instruction& I : BB) {
-        // check if I is a vload, and if it is, make it as a fakeReg
-        CallInst *call = dyn_cast<CallInst>(&I);
-        if (call != NULL && UnfoldVectorInstPass::VLOADS.find(call->getCalledFunction()->getName().str()) != UnfoldVectorInstPass::VLOADS.end()) {
-          Symbol *s = TM.fakeReg();
-          symbolTable[&I] = s;
-          continue;
-        }
-
-        //If not colored(alloca and its derivatives), do nothing.
-        if(RG.findValue(&I) == -1) continue;
-
-        unsigned c = RG.getValueToColor(&F, &I);
-        Symbol* s = TM.reg(c);
-        symbolTable[&I] = s;
-
-      }
-    }
-  }
-
   //Assign registers for Global variables
   unsigned stack_acc = 0, heap_acc = 0; //accumulated offset from the gvp pointer
   Module::global_iterator it;
@@ -605,6 +561,67 @@ SymbolMap::SymbolMap(Module* M, TargetMachine& TM, RegisterGraph& RG) : M(M), TM
     Memory* gvaddr = new Memory(TM.gvp(), heap_acc);
     symbolTable[&gv] = gvaddr;
     heap_acc += size;
+  }
+
+  //Initiate Machine symbols.
+
+  for(Function& F : *M) {
+    assert(F.hasName() && "All functions in module should be named");
+    symbolTable[&F] = new Func(F.getName().str());
+
+    unsigned unnamedBB = 0;
+
+    //Assign registers for arguments
+    int i = 0;
+    for(Value& arg : F.args()) {
+      symbolTable[&arg] = TM.arg(i);
+      i++;
+    }
+
+    Value *FirstAlloca = NULL;
+    if(!F.isDeclaration()) {
+      unsigned acc = 0;
+      BasicBlock& entry = F.getEntryBlock();
+      for (Instruction &I : entry)
+        if (AllocaInst *alloca = dyn_cast<AllocaInst>(&I)) {
+          if (!FirstAlloca) FirstAlloca = alloca;
+          //Update SymbolMap.
+          Memory* stackaddr = new Memory(TM.sp(), acc);
+          symbolTable[alloca] = stackaddr;
+          unsigned size = getAccessSize(alloca->getAllocatedType());
+          acc += (size + 7) / 8 * 8;
+        }
+    }
+
+    //Assign registers for instructions
+    for(BasicBlock& BB : F) {
+
+      symbolTable[&BB] = new Block(BB.hasName() ? BB.getName().str() : "_defaultBB" + to_string(unnamedBB++));
+
+      for(Instruction& I : BB) {
+        // check if I is a vload, and if it is, make it as a fakeReg
+        CallInst *call = dyn_cast<CallInst>(&I);
+        if (call != NULL && UnfoldVectorInstPass::VLOADS.find(call->getCalledFunction()->getName().str()) != UnfoldVectorInstPass::VLOADS.end()) {
+          Symbol *s = TM.fakeReg();
+          symbolTable[&I] = s;
+          continue;
+        }
+
+        //If not colored(alloca and its derivatives), do nothing.
+        if(RG.findValue(&I) == -1) continue;
+
+        if ((isa<TruncInst>(&I) || isa<ZExtInst>(&I) || isa<PtrToIntInst>(&I) ||
+            isa<IntToPtrInst>(&I) || isa<BitCastInst>(&I)) &&
+            (isa<GlobalVariable>(I.getOperand(0)) || isa<Argument>(I.getOperand(0)) ||
+            (isa<AllocaInst>(I.getOperand(0)) && I.getOperand(0) == FirstAlloca)))
+            symbolTable[&I] = symbolTable[I.getOperand(0)];
+        else {
+          unsigned c = RG.getValueToColor(&F, &I);
+          Symbol* s = TM.reg(c);
+          symbolTable[&I] = s;
+        }
+      }
+    }
   }
 }
 
