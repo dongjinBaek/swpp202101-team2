@@ -19,13 +19,10 @@ namespace backend {
 
 // Return sizeof(T) in bytes.
 unsigned getAccessSize(Type *T) {
-  if (isa<PointerType>(T))
+  if (isa<PointerType>(T) || isa<IntegerType>(T))
     return 8;
-  else if (isa<IntegerType>(T)) {
-    return T->getIntegerBitWidth() == 1 ? 1 : (T->getIntegerBitWidth() / 8);
-  } else if (isa<ArrayType>(T)) {
+  else if (isa<ArrayType>(T))
     return getAccessSize(T->getArrayElementType()) * T->getArrayNumElements();
-  }
   assert(false && "Unsupported access size type!");
 }
 
@@ -511,11 +508,8 @@ map<Function*, unsigned> Backend::processAlloca(Module& M, SymbolMap& SM) {
     unsigned acc = 0;
     for(Instruction& I : entry) {
       AllocaInst* alloca = dyn_cast<AllocaInst>(&I);
-      if(alloca) {
-        //Update acc
-        unsigned size = getAccessSize(alloca->getAllocatedType());
-        acc += (size + 7) / 8 * 8;
-      }
+      if(alloca) //Update acc
+        acc += getAccessSize(alloca->getAllocatedType());
     }
 
     spOffsetMap[&F] = acc;
@@ -538,7 +532,6 @@ SymbolMap::SymbolMap(Module* M, TargetMachine& TM, RegisterGraph& RG) : M(M), TM
     Value& gv = *it;
     if (!isa<GlobalVariable>(gv) || gv.getName().contains('$')) continue;
     unsigned size = getAccessSize(dyn_cast<GlobalVariable>(&gv)->getValueType());
-    size = (size + 7) / 8 * 8;
     if (stack_acc + size > MAX_STACK_SIZE) break;
     stack_acc += size;
   }
@@ -547,7 +540,6 @@ SymbolMap::SymbolMap(Module* M, TargetMachine& TM, RegisterGraph& RG) : M(M), TM
     Value& gv = *it2;
     if (!isa<GlobalVariable>(gv) || gv.getName().contains('$')) continue;
     unsigned size = getAccessSize(dyn_cast<GlobalVariable>(&gv)->getValueType());
-    size = (size + 7) / 8 * 8;
     Memory* gvaddr = new Memory(TM.sgvp(), stack_acc);
     symbolTable[&gv] = gvaddr;
     stack_acc -= size;
@@ -557,7 +549,6 @@ SymbolMap::SymbolMap(Module* M, TargetMachine& TM, RegisterGraph& RG) : M(M), TM
     Value& gv = *it2;
     if (!isa<GlobalVariable>(gv) || gv.getName().contains('$')) continue;
     unsigned size = getAccessSize(dyn_cast<GlobalVariable>(&gv)->getValueType());
-    size = (size + 7) / 8 * 8;
     Memory* gvaddr = new Memory(TM.gvp(), heap_acc);
     symbolTable[&gv] = gvaddr;
     heap_acc += size;
@@ -588,8 +579,7 @@ SymbolMap::SymbolMap(Module* M, TargetMachine& TM, RegisterGraph& RG) : M(M), TM
           //Update SymbolMap.
           Memory* stackaddr = new Memory(TM.sp(), acc);
           symbolTable[alloca] = stackaddr;
-          unsigned size = getAccessSize(alloca->getAllocatedType());
-          acc += (size + 7) / 8 * 8;
+          acc += getAccessSize(alloca->getAllocatedType());
         }
     }
 

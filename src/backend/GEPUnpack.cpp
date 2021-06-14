@@ -11,15 +11,46 @@ namespace backend {
 
 // Return sizeof(T) in bytes.
 static
-unsigned getAccessSize(Type *T) {
+unsigned getAccessSize(Type *T, unsigned int maxBW) {
   if (isa<PointerType>(T))
     return 8;
   else if (isa<IntegerType>(T)) {
-    return T->getIntegerBitWidth() == 1 ? 1 : (T->getIntegerBitWidth() / 8);
-  } else if (isa<ArrayType>(T)) {
-    return getAccessSize(T->getArrayElementType()) * T->getArrayNumElements();
+    unsigned int currBW = T->getIntegerBitWidth() == 1 ? 1 : (T->getIntegerBitWidth() / 8);
+    return 8 * currBW / maxBW;
   }
+  else if (isa<ArrayType>(T))
+    return getAccessSize(T->getArrayElementType(), maxBW) * T->getArrayNumElements();
   assert(false && "Unsupported access size type!");
+}
+
+static unsigned int getMaxBitWidth(Instruction &I) {
+    unsigned int maxBW = 1;
+    for (auto &U : I.uses()) {
+    User *user = U.getUser();
+    if (LoadInst *LI = dyn_cast<LoadInst>(user)) {
+      Type *T = LI->getType();
+      unsigned int currBW = isa<IntegerType>(T) ?
+          (T->getIntegerBitWidth() == 1 ? 1 : (T->getIntegerBitWidth() / 8)) : 8;
+      maxBW = max(maxBW, currBW);
+    }
+    else if (StoreInst *SI = dyn_cast<StoreInst>(user)) {
+      Type *T = SI->getOperand(0)->getType();
+      unsigned int currBW = isa<IntegerType>(T) ?
+          (T->getIntegerBitWidth() == 1 ? 1 : (T->getIntegerBitWidth() / 8)) : 8;
+      maxBW = max(maxBW, currBW);
+    }
+    else if (BitCastInst *BCI = dyn_cast<BitCastInst>(user)) {
+      unsigned int currBW = getMaxBitWidth(*BCI);
+      maxBW = max(maxBW, currBW);
+    }
+    else {
+      Type *T = I.getType()->getPointerElementType();
+      unsigned int currBW = isa<IntegerType>(T) ?
+          (T->getIntegerBitWidth() == 1 ? 1 : (T->getIntegerBitWidth() / 8)) : 8;
+      maxBW = max(maxBW, currBW);
+    }
+  }
+  return maxBW;
 }
 
 static void collectLoadStoreInst(Instruction *I, vector<LoadInst *> &LoadList,
@@ -62,6 +93,7 @@ PreservedAnalyses GEPUnpackPass::run(Module &M, ModuleAnalysisManager &MAM) {
     for (auto it = inst_begin(F); it != inst_end(F); ++it) {
       Instruction &I = *it;
       if (I.getOpcode() != Instruction::GetElementPtr) continue;
+      unsigned int maxBW = getMaxBitWidth(I);
       GetElementPtrInst *GI = dyn_cast<GetElementPtrInst>(&I);
       Value *ptrOp = GI->getPointerOperand();
       Type *curr = ptrOp->getType();
@@ -73,7 +105,7 @@ PreservedAnalyses GEPUnpackPass::run(Module &M, ModuleAnalysisManager &MAM) {
       BinaryOperator *BO;
       for (auto opIt = GI->idx_begin(); opIt != GI->idx_end(); ++opIt) {
         Value *op = *opIt;
-        unsigned size = getAccessSize(curr);
+        unsigned size = getAccessSize(curr, maxBW);
         if ((CI = dyn_cast<ConstantInt>(op)))
           cst += CI->getZExtValue() * size;
         else if ((BO = dyn_cast<BinaryOperator>(op)) && BO->getOpcode() ==

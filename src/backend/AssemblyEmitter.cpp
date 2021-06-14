@@ -88,7 +88,7 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
             for (it = M->global_begin(); it != M->global_end(); it++) {
                 GlobalVariable& gv = *it;
                 if (gv.getName().contains('$')) continue;
-                unsigned size = (getAccessSize(gv.getValueType()) + 7) / 8 * 8;
+                unsigned size = getAccessSize(gv.getValueType());
                 if (stack_acc + size > MAX_STACK_SIZE) break;
                 stack_acc += size;
             }
@@ -101,7 +101,7 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
             for (auto it2 = M->global_begin(); it2 != it; it2++) {
                 GlobalVariable& gv = *it2;
                 if (gv.getName().contains('$')) continue;
-                unsigned size = (getAccessSize(gv.getValueType()) + 7) / 8 * 8;
+                unsigned size = getAccessSize(gv.getValueType());
                 if (gv.hasInitializer() && !gv.getInitializer()->isZeroValue())
                     *fout << emitInst({"store", to_string(getAccessSize(
                         gv.getValueType())), name(gv.getInitializer()),
@@ -114,7 +114,7 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
                 GlobalVariable& gv = *it2;
                 if (gv.getName().contains('$')) continue;
                 //temporarily stores the GV pointer.
-                unsigned size = (getAccessSize(gv.getValueType()) + 7) / 8 * 8;
+                unsigned size = getAccessSize(gv.getValueType());
                 *fout << emitInst({"r1 = malloc", to_string(size)});
                 if(gv.hasInitializer() && !gv.getInitializer()->isZeroValue())
                     *fout << emitInst({"store", to_string(getAccessSize(
