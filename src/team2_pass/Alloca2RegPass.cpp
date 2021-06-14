@@ -40,6 +40,7 @@ PreservedAnalyses Alloca2RegPass::run(Module &M, ModuleAnalysisManager &MAM) {
                   assert(false && "use not GEP!!");
                 }
             }
+            InstsToRemove.push_back(AI);
             for (auto *I : InstsToRemove) {
               I->eraseFromParent();
             }
@@ -59,7 +60,6 @@ void Alloca2RegPass::changeUseOfGEPToSwitch(GetElementPtrInst *GEPI, Function &F
     if (LoadInst* LI = dyn_cast<LoadInst>(I)) {
       // split current basic block in two, diving from LI
       auto *UpBB = LI->getParent();
-      if (UpBB->getName() == "entry") return;
       auto *DownBB = UpBB->splitBasicBlock(LI, "splitted" + to_string(cnt++));
       // insert n simple basic blocks for switch
       vector<BasicBlock *> SwitchBBs;
@@ -88,7 +88,6 @@ void Alloca2RegPass::changeUseOfGEPToSwitch(GetElementPtrInst *GEPI, Function &F
     else if (StoreInst* SI = dyn_cast<StoreInst>(I)) {
       // split current basic block in two, diving from LI
       auto *UpBB = SI->getParent();
-      if (UpBB->getName() == "entry") return;
       auto *DownBB = UpBB->splitBasicBlock(SI, "splitted"+ to_string(cnt++));
       // insert n simple basic blocks for switch
       vector<BasicBlock *> SwitchBBs;
@@ -116,6 +115,7 @@ void Alloca2RegPass::changeUseOfGEPToSwitch(GetElementPtrInst *GEPI, Function &F
       changeUseOfGEPToSwitch(GI, F, S);
     }
   }
+  InstsToRemove.push_back(dyn_cast<Instruction>(GEPI));
 }
 
 bool Alloca2RegPass::canChangeAlloca2Reg(AllocaInst *AI) {
