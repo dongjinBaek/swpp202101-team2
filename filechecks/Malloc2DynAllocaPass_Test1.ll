@@ -44,12 +44,8 @@ entry:
 ; CHECK: .__sp.next[[#]]:
   %arraydecay = getelementptr inbounds [256 x i64], [256 x i64]* %temp, i64 0, i64 0
 ; CHECK-NEXT: r[[#R7:]] = add r32 0 64
-; CHECK-NEXT: r[[#R8:]] = mul 0 2048 64
-; CHECK-NEXT: r[[#R9:]] = add r[[#R7]] r[[#R8]] 64
-; CHECK-NEXT: r[[#R10:]] = mul 0 8 64
-; CHECK-NEXT: r[[#R11:]] = add r[[#R9]] r[[#R10]] 64
   call void @func(i64 %call, i64* %arraydecay)
-; CHECK-NEXT: call func r[[#R4]] r[[#R11]]
+; CHECK-NEXT: call func r[[#R4]] r[[#R7]]
   call void @free(i8* %call1)
 ; CHECK-NEXT: r[[#R12:]] = mul r[[#R6]] 1 64
 ; CHECK-NEXT: r[[#R13:]] = icmp ule r[[#R12]] 102400 64

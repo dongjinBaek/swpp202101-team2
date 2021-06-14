@@ -53,7 +53,7 @@ FunctionPassManager buildFunctionSimplificationPipeline() {
   return FPM;
 }
 
-ModulePassManager buildPreSimplificationPipeline() {
+ModulePassManager buildModuleSimplificationPipeline() {
   ModulePassManager MPM(true);
   MPM.addPass(InferFunctionAttrsPass());
 
@@ -89,10 +89,42 @@ ModuleInlinerWrapperPass buildInlinerPipeline() {
   return MIWP;
 }
 
-ModulePassManager buildPostSimplificationPipeline() {
+ModulePassManager buildModuleOptimizationPipeline() {
   ModulePassManager MPM;
   MPM.addPass(GlobalOptPass());
   MPM.addPass(GlobalDCEPass());
+  MPM.addPass(ReversePostOrderFunctionAttrsPass());
+  MPM.addPass(RequireAnalysisPass<GlobalsAA, Module>());
+
+  FunctionPassManager OptimizePM;
+  OptimizePM.addPass(createFunctionToLoopPassAdaptor(
+      LoopRotatePass(true, false), true, false, false));
+  OptimizePM.addPass(LoopLoadEliminationPass());
+  OptimizePM.addPass(InstCombinePass());
+  OptimizePM.addPass(SimplifyCFGPass(SimplifyCFGOptions().needCanonicalLoops(false)));
+  OptimizePM.addPass(LoopUnrollAndJamPass(3));
+  OptimizePM.addPass(LoopUnrollPass(LoopUnrollOptions(3, false, false)
+                      .setPartial(true).setRuntime(true).setUpperBound(true)));
+  OptimizePM.addPass(InstCombinePass());
+  OptimizePM.addPass(RequireAnalysisPass<OptimizationRemarkEmitterAnalysis, Function>());
+  OptimizePM.addPass(createFunctionToLoopPassAdaptor(
+      LICMPass(100, 250), true, true, false));
+  MPM.addPass(createModuleToFunctionPassAdaptor(move(OptimizePM)));
+
+  return MPM;
+}
+
+ModulePassManager buildModulePostOptimizationPipeline() {
+  ModulePassManager MPM;
+  FunctionPassManager OptimizePM;
+  OptimizePM.addPass(LoopSinkPass());
+  OptimizePM.addPass(InstSimplifyPass());
+  OptimizePM.addPass(DivRemPairsPass());
+  OptimizePM.addPass(SimplifyCFGPass());
+  MPM.addPass(createModuleToFunctionPassAdaptor(move(OptimizePM)));
+
+  MPM.addPass(GlobalDCEPass());
+  MPM.addPass(ConstantMergePass());
 
   return MPM;
 }

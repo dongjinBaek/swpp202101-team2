@@ -14,6 +14,15 @@ string AssemblyEmitter::name(Value* v) {
         //return the value itself.
         return to_string(dyn_cast<ConstantInt>(v)->getZExtValue());
     }
+    Symbol *symbol = SM->get(v);
+    if (Memory *mem = symbol->castToMemory()) {
+        if (mem->getBase() == TM->gvp())
+            return to_string(204800 + mem->getOffset());
+        else if (mem->getBase() == TM->sgvp())
+            return to_string(102400 - mem->getOffset());
+        else if (mem->getBase() == TM->sp() && mem->getOffset() == 0)
+            return "sp";
+    }
     return SM->get(v)->getName();
 }
 
@@ -37,6 +46,9 @@ string AssemblyEmitter::emitCopy(Instruction* v, Value* op) {
         }
         else if (mem->getBase() == TM->sgvp())
             return emitBinary(v, "sub", "102400", to_string(mem->getOffset()));
+        else if (mem->getBase() == TM->sp())
+            return emitBinary(v, "add", v->getFunction()->getName() == "main" ?
+                                "r32" : "sp", to_string(mem->getOffset()));
         return emitBinary(v, "add", mem->getBase()->getName(), to_string(mem->getOffset()));
     }
     return emitBinary(v, "mul", name(op), "1");
@@ -76,7 +88,7 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
             for (it = M->global_begin(); it != M->global_end(); it++) {
                 GlobalVariable& gv = *it;
                 if (gv.getName().contains('$')) continue;
-                unsigned size = (getAccessSize(gv.getValueType()) + 7) / 8 * 8;
+                unsigned size = getAccessSize(gv.getValueType());
                 if (stack_acc + size > MAX_STACK_SIZE) break;
                 stack_acc += size;
             }
@@ -89,7 +101,7 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
             for (auto it2 = M->global_begin(); it2 != it; it2++) {
                 GlobalVariable& gv = *it2;
                 if (gv.getName().contains('$')) continue;
-                unsigned size = (getAccessSize(gv.getValueType()) + 7) / 8 * 8;
+                unsigned size = getAccessSize(gv.getValueType());
                 if (gv.hasInitializer() && !gv.getInitializer()->isZeroValue())
                     *fout << emitInst({"store", to_string(getAccessSize(
                         gv.getValueType())), name(gv.getInitializer()),
@@ -102,7 +114,7 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
                 GlobalVariable& gv = *it2;
                 if (gv.getName().contains('$')) continue;
                 //temporarily stores the GV pointer.
-                unsigned size = (getAccessSize(gv.getValueType()) + 7) / 8 * 8;
+                unsigned size = getAccessSize(gv.getValueType());
                 *fout << emitInst({"r1 = malloc", to_string(size)});
                 if(gv.hasInitializer() && !gv.getInitializer()->isZeroValue())
                     *fout << emitInst({"store", to_string(getAccessSize(
@@ -208,36 +220,8 @@ void AssemblyEmitter::visitSExtInst(SExtInst& I) {
     *fout << emitBinary(&I, "sdiv", name(&I), to_string(1llu<<(afterBits-beforeBits)));
 }
 void AssemblyEmitter::visitPtrToIntInst(PtrToIntInst& I) {
-    Value* ptr = I.getPointerOperand();
-    Symbol* symbol = SM->get(ptr);
-    //if pointer operand is a memory value(GV or alloca),
-    if(symbol) {
-        if(Memory* mem = symbol->castToMemory()) {
-            if(mem->getBase() == TM->sp()) {
-                string base = I.getParent()->getParent()->getName() == "main" ? "r32" : "sp";
-                *fout << emitBinary(&I, "add", base, to_string(mem->getOffset()));
-            }
-            else if(mem->getBase() == TM->gvp()) {
-                *fout << emitBinary(&I, "add", "204800", to_string(mem->getOffset()));
-            }
-            else if (mem->getBase() == TM->sgvp())
-                *fout << emitBinary(&I, "sub", "102400", to_string(mem->getOffset()));
-            else assert(false && "base of memory pointers should be sp or gvp");
-        }
-        //else a pointer stored in register,
-        else if(Register* reg = symbol->castToRegister()) {
-            //if from and to values are stored in a different source, copy.
-            if(SM->get(&I) != SM->get(I.getOperand(0))) {
-                *fout << emitCopy(&I, I.getOperand(0));
-            }
-        }
-        return;
-    }
-    //else ptr is null
-    if(isa<ConstantPointerNull>(ptr)) {
-        *fout << emitBinary(&I, "mul", "0", "0");
-    }
-    else assert(false && "pointer of a memory operation should have an appropriate symbol assigned");
+    if(SM->get(&I) != SM->get(I.getPointerOperand()))
+        *fout << emitCopy(&I, I.getPointerOperand());
 }
 void AssemblyEmitter::visitIntToPtrInst(IntToPtrInst& I) {
     //If coallocated to the same registers, do nothing.
@@ -292,13 +276,85 @@ void AssemblyEmitter::visitCallInst(CallInst& I) {
         *fout << emitInst({"br .__sp.next" + str});
         *fout << ".__sp.next" + str << ":\n";
     }
-    else if (Fname == "$store") {
+    else if (Fname == "$store") { // for alloca2switch
         assert(args.size()==3 && "argument of $store() should be 3");
         string name0 = name(I.getArgOperand(0)), name1 = name(I.getArgOperand(1));
         ConstantInt *CI = dyn_cast<ConstantInt>(I.getOperand(2));
         assert(CI && "%store bitwidth not ConstantInt");
         string width = to_string(CI->getZExtValue());
         *fout << emitInst({name0, "= mul 1", name1, width});
+    }
+    else if (Fname.rfind("$load.", 0) == 0) {
+        string size = to_string(getAccessSize(I.getType()));
+        Value *ptr = I.getArgOperand(0), *var = I.getArgOperand(1);
+        ConstantInt *cst = dyn_cast<ConstantInt>(I.getArgOperand(2));
+        Value *temp = I.getArgOperand(3);
+        if (Symbol *symbol = SM->get(ptr)) {
+            if (Memory *mem = symbol->castToMemory()) {
+                if (mem->getBase() == TM->gvp())
+                    *fout << emitInst({name(&I), "= load", size, name(var),
+                        to_string(204800 + mem->getOffset() + cst->getZExtValue())});
+                else if (mem->getBase() == TM->sgvp())
+                    *fout << emitInst({name(&I), "= load", size, name(var),
+                        to_string(102400 - mem->getOffset() + cst->getZExtValue())});
+                else { // mem->getBase() == TM->sp()
+                    if (isa<ConstantInt>(var))
+                        *fout << emitInst({name(&I), "= load", size, "sp",
+                            to_string(mem->getOffset() + cst->getZExtValue())});
+                    else {
+                        *fout << emitInst({name(temp), "= add sp", name(var), "64"});
+                        *fout << emitInst({name(&I), "= load", size, name(temp),
+                            to_string(mem->getOffset() + cst->getZExtValue())});
+                    }
+                }
+            }
+            else if (Register *reg = symbol->castToRegister()) { // register (reg, arg)
+                if (isa<ConstantInt>(var))
+                    *fout << emitInst({name(&I), "= load", size, name(ptr), name(cst)});
+                else {
+                    *fout << emitInst({name(temp), "= add", name(ptr), name(var), "64"});
+                    *fout << emitInst({name(&I), "= load", size, name(temp), name(cst)});
+                }
+            }
+            else assert("impossible");
+        }
+        else *fout << emitInst({name(&I), "= load", size, name(var), name(cst)});
+    }
+    else if (Fname.rfind("$store.", 0) == 0) {
+        Value *val = I.getArgOperand(0), *ptr = I.getArgOperand(1), *var = I.getArgOperand(2);
+        ConstantInt *cst = dyn_cast<ConstantInt>(I.getArgOperand(3));
+        string size = to_string(getAccessSize(val->getType()));
+        Value *temp = I.getArgOperand(4);
+        if (Symbol *symbol = SM->get(ptr)) {
+            if (Memory *mem = symbol->castToMemory()) {
+                if (mem->getBase() == TM->gvp())
+                    *fout << emitInst({"store", size, name(val), name(var),
+                        to_string(204800 + mem->getOffset() + cst->getZExtValue())});
+                else if (mem->getBase() == TM->sgvp())
+                    *fout << emitInst({"store", size, name(val), name(var),
+                        to_string(102400 - mem->getOffset() + cst->getZExtValue())});
+                else { // mem->getBase() == TM->sp()
+                    if (isa<ConstantInt>(var))
+                        *fout << emitInst({"store", size, name(val), "sp",
+                            to_string(mem->getOffset() + cst->getZExtValue())});
+                    else {
+                        *fout << emitInst({name(temp), "= add sp", name(var), "64"});
+                        *fout << emitInst({"store", size, name(val), name(temp),
+                            to_string(mem->getOffset() + cst->getZExtValue())});
+                    }
+                }
+            }
+            else if (Register *reg = symbol->castToRegister()) { // register (reg, arg)
+                if (isa<ConstantInt>(var))
+                    *fout << emitInst({"store", size, name(val), name(ptr), name(cst)});
+                else {
+                    *fout << emitInst({name(temp), "= add", name(ptr), name(var), "64"});
+                    *fout << emitInst({"store", size, name(val), name(temp), name(cst)});
+                }
+            }
+            else assert("impossible");
+        }
+        else *fout << emitInst({"store", size, name(val), name(var), name(cst)});
     }
     else if(Fname == "free") {
         assert(args.size()==1 && "argument of free() should be 1");
