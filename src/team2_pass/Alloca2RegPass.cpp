@@ -58,9 +58,9 @@ void Alloca2RegPass::changeUseOfGEPToSwitch(GetElementPtrInst *GEPI, Function &F
     auto *I = *it;
     if (LoadInst* LI = dyn_cast<LoadInst>(I)) {
       // split current basic block in two, diving from LI
-      auto *DownBB = LI->getParent();
-      if (DownBB->getName() == "entry") return;
-      auto *UpBB = DownBB->splitBasicBlockBefore(LI, "splitted" + to_string(cnt++));
+      auto *UpBB = LI->getParent();
+      if (UpBB->getName() == "entry") return;
+      auto *DownBB = UpBB->splitBasicBlock(LI, "splitted" + to_string(cnt++));
       // insert n simple basic blocks for switch
       vector<BasicBlock *> SwitchBBs;
       for (int i=0; i<n; i++) {
@@ -87,9 +87,9 @@ void Alloca2RegPass::changeUseOfGEPToSwitch(GetElementPtrInst *GEPI, Function &F
     }
     else if (StoreInst* SI = dyn_cast<StoreInst>(I)) {
       // split current basic block in two, diving from LI
-      auto *DownBB = SI->getParent();
-      if (DownBB->getName() == "entry") return;
-      auto *UpBB = DownBB->splitBasicBlockBefore(SI, "splitted"+ to_string(cnt++));
+      auto *UpBB = SI->getParent();
+      if (UpBB->getName() == "entry") return;
+      auto *DownBB = UpBB->splitBasicBlock(SI, "splitted"+ to_string(cnt++));
       // insert n simple basic blocks for switch
       vector<BasicBlock *> SwitchBBs;
       for (int i=0; i<n; i++) {
