@@ -276,13 +276,85 @@ void AssemblyEmitter::visitCallInst(CallInst& I) {
         *fout << emitInst({"br .__sp.next" + str});
         *fout << ".__sp.next" + str << ":\n";
     }
-    else if (Fname == "$store") {
+    else if (Fname == "$store") { // for alloca2switch
         assert(args.size()==3 && "argument of $store() should be 3");
         string name0 = name(I.getArgOperand(0)), name1 = name(I.getArgOperand(1));
         ConstantInt *CI = dyn_cast<ConstantInt>(I.getOperand(2));
         assert(CI && "%store bitwidth not ConstantInt");
         string width = to_string(CI->getZExtValue());
         *fout << emitInst({name0, "= mul 1", name1, width});
+    }
+    else if (Fname.rfind("$load.", 0) == 0) {
+        string size = to_string(getAccessSize(I.getType()));
+        Value *ptr = I.getArgOperand(0), *var = I.getArgOperand(1);
+        ConstantInt *cst = dyn_cast<ConstantInt>(I.getArgOperand(2));
+        Value *temp = I.getArgOperand(3);
+        if (Symbol *symbol = SM->get(ptr)) {
+            if (Memory *mem = symbol->castToMemory()) {
+                if (mem->getBase() == TM->gvp())
+                    *fout << emitInst({name(&I), "= load", size, name(var),
+                        to_string(204800 + mem->getOffset() + cst->getZExtValue())});
+                else if (mem->getBase() == TM->sgvp())
+                    *fout << emitInst({name(&I), "= load", size, name(var),
+                        to_string(102400 - mem->getOffset() + cst->getZExtValue())});
+                else { // mem->getBase() == TM->sp()
+                    if (isa<ConstantInt>(var))
+                        *fout << emitInst({name(&I), "= load", size, "sp",
+                            to_string(mem->getOffset() + cst->getZExtValue())});
+                    else {
+                        *fout << emitInst({name(temp), "= add sp", name(var), "64"});
+                        *fout << emitInst({name(&I), "= load", size, name(temp),
+                            to_string(mem->getOffset() + cst->getZExtValue())});
+                    }
+                }
+            }
+            else if (Register *reg = symbol->castToRegister()) { // register (reg, arg)
+                if (isa<ConstantInt>(var))
+                    *fout << emitInst({name(&I), "= load", size, name(ptr), name(cst)});
+                else {
+                    *fout << emitInst({name(temp), "= add", name(ptr), name(var), "64"});
+                    *fout << emitInst({name(&I), "= load", size, name(temp), name(cst)});
+                }
+            }
+            else assert("impossible");
+        }
+        else *fout << emitInst({name(&I), "= load", size, name(var), name(cst)});
+    }
+    else if (Fname.rfind("$store.", 0) == 0) {
+        Value *val = I.getArgOperand(0), *ptr = I.getArgOperand(1), *var = I.getArgOperand(2);
+        ConstantInt *cst = dyn_cast<ConstantInt>(I.getArgOperand(3));
+        string size = to_string(getAccessSize(val->getType()));
+        Value *temp = I.getArgOperand(4);
+        if (Symbol *symbol = SM->get(ptr)) {
+            if (Memory *mem = symbol->castToMemory()) {
+                if (mem->getBase() == TM->gvp())
+                    *fout << emitInst({"store", size, name(val), name(var),
+                        to_string(204800 + mem->getOffset() + cst->getZExtValue())});
+                else if (mem->getBase() == TM->sgvp())
+                    *fout << emitInst({"store", size, name(val), name(var),
+                        to_string(102400 - mem->getOffset() + cst->getZExtValue())});
+                else { // mem->getBase() == TM->sp()
+                    if (isa<ConstantInt>(var))
+                        *fout << emitInst({"store", size, name(val), "sp",
+                            to_string(mem->getOffset() + cst->getZExtValue())});
+                    else {
+                        *fout << emitInst({name(temp), "= add sp", name(var), "64"});
+                        *fout << emitInst({"store", size, name(val), name(temp),
+                            to_string(mem->getOffset() + cst->getZExtValue())});
+                    }
+                }
+            }
+            else if (Register *reg = symbol->castToRegister()) { // register (reg, arg)
+                if (isa<ConstantInt>(var))
+                    *fout << emitInst({"store", size, name(val), name(ptr), name(cst)});
+                else {
+                    *fout << emitInst({name(temp), "= add", name(ptr), name(var), "64"});
+                    *fout << emitInst({"store", size, name(val), name(temp), name(cst)});
+                }
+            }
+            else assert("impossible");
+        }
+        else *fout << emitInst({"store", size, name(val), name(var), name(cst)});
     }
     else if(Fname == "free") {
         assert(args.size()==1 && "argument of free() should be 1");
