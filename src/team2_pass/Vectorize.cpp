@@ -356,7 +356,13 @@ void VectorizePass::sinkRecursive(BasicBlock &BB, Instruction *I) {
 
   if (LI || SI || (CI && doesAccessMemory(CI))) {
     // find next user
-    Instruction *NextUI = I->user_empty() ? nullptr : I->user_back();
+    Instruction *NextUI = nullptr;
+    for (auto it = I->user_begin(); it != I->user_end(); it++) {
+      User *user = *it;
+      if (Instruction *UserI = dyn_cast<Instruction>(user))
+        if (UserI->getParent() == &BB && !isa<PHINode>(UserI))
+          NextUI = NextUI ? (NextUI->comesBefore(UserI) ? NextUI : UserI) : UserI;
+    }
     if (NextUI && NextUI->getParent() == &BB)
       MaxSinkI = MaxSinkI->comesBefore(NextUI) ? MaxSinkI : NextUI;
 
