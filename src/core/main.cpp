@@ -27,13 +27,6 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/CommandLine.h"
 
-#include "llvm/Transforms/Scalar/LoopUnrollAndJamPass.h"
-#include "llvm/Transforms/Scalar/LoopSink.h"
-#include "llvm/Transforms/Scalar/InstSimplifyPass.h"
-#include "llvm/Transforms/Scalar/DivRemPairs.h"
-#include "llvm/Transforms/Scalar/SpeculateAroundPHIs.h"
-#include "llvm/Transforms/IPO/ConstantMerge.h"
-
 #include <string>
 
 using namespace std;
@@ -102,87 +95,48 @@ int main(int argc, char *argv[]) {
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-  if (shouldUsePass("SetIsNoInlinePass")) {
-    MPM.addPass(buildModuleSimplificationPipeline());
-    MPM.addPass(SetIsNoInlinePass());
-    MPM.addPass(buildInlinerPipeline());
-    MPM.addPass(buildModuleOptimizationPipeline());
-  }
+  MPM.addPass(RemoveLoopMetadataPass());
 
-/*
-  if (shouldUsePass("ExtractFromLoopPass")) {
-    FunctionPassManager FPM;
+  MPM.addPass(buildModuleSimplificationPipeline());
+  CGSCCPassManager CPM;
+  CPM.addPass(createCGSCCToFunctionPassAdaptor(
+      buildFunctionSimplificationPipeline()));
+  MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(move(CPM)));
 
-    FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LICMPass())));
-    FPM.addPass(ExtractFromLoopPass());
-    FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LICMPass())));
-    FPM.addPass(ExtractFromLoopPass());
+  MPM.addPass(SetIsNoInlinePass());
+  MPM.addPass(buildInlinerPipeline());
 
-    MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
-  }
-*/
-  if (shouldUsePass("LoopUnrollPass") || shouldUsePass("VectorizePass")) {
-    MPM.addPass(RemoveLoopMetadataPass());
+  MPM.addPass(buildModuleOptimizationPipeline());
 
-    FunctionPassManager OptimizePM;
-    OptimizePM.addPass(LoopUnrollAndJamPass(3));
-    OptimizePM.addPass(LoopUnrollPass(LoopUnrollOptions(3, false, false)
-                                                   .setPartial(true)
-                                                   .setRuntime(true)
-                                                   .setUpperBound(true)));
-    OptimizePM.addPass(InstCombinePass());
-    OptimizePM.addPass(RequireAnalysisPass<OptimizationRemarkEmitterAnalysis, Function>());
-    OptimizePM.addPass(createFunctionToLoopPassAdaptor(
-        LICMPass(100, 250), true, true, false));
-    OptimizePM.addPass(LoopSinkPass());
-    MPM.addPass(createModuleToFunctionPassAdaptor(move(OptimizePM)));
-  }
+  // load/store vectorize
+  MPM.addPass(VectorizePass());
 
-  if (shouldUsePass("VectorizePass")) {
-    MPM.addPass(VectorizePass());
+  FunctionPassManager GlobalCleanupPM;
+  GlobalCleanupPM.addPass(InstCombinePass());
+  GlobalCleanupPM.addPass(SimplifyCFGPass());
+  MPM.addPass(createModuleToFunctionPassAdaptor(move(GlobalCleanupPM)));
 
-    FunctionPassManager OptimizePM;
-    OptimizePM.addPass(InstSimplifyPass());
-    OptimizePM.addPass(DivRemPairsPass());
-    OptimizePM.addPass(SimplifyCFGPass());
-    OptimizePM.addPass(SpeculateAroundPHIsPass());
-    MPM.addPass(createModuleToFunctionPassAdaptor(move(OptimizePM)));
+  MPM.addPass(buildModulePostOptimizationPipeline());
 
-    MPM.addPass(GlobalDCEPass());
-    MPM.addPass(ConstantMergePass());
-  }
+  // scale to int 64 to relieve temperature
+  MPM.addPass(ScaleToInt64Pass());
 
-  if (shouldUsePass("ScaleToInt64Pass")) {
-    MPM.addPass(ScaleToInt64Pass());
-  }
+  // conditional branch true <-> false, branch to switch, etc.
+  MPM.addPass(CondBranchDeflationPass());
 
-  if (shouldUsePass("CondBranchDeflationPass")) {
-    MPM.addPass(CondBranchDeflationPass());
-  }
-  
-  if (shouldUsePass("Malloc2DynAllocaPass")) {
-    MPM.addPass(Malloc2DynAllocaPass());
-  }
+  // memory related optimizations
+  MPM.addPass(Malloc2DynAllocaPass());
+  MPM.addPass(Alloca2RegPass());
 
-  if (shouldUsePass("Alloca2RegPass")) {
-    MPM.addPass(Alloca2RegPass());
-  }
-/*
-  if (shouldUsePass("IROutlinerPass")) {
-    MPM.addPass(IROutlinerPass());
-  }
-*/
-  if (shouldUsePass("ArithmeticPass")) {
-    FunctionPassManager FPM2;
+  //MPM.addPass(IROutlinerPass());
 
-    FPM2.addPass(GVN());
-    FPM2.addPass(IntegerEqPropagationPass());
-    FPM2.addPass(GVN());
-    FPM2.addPass(ArithmeticPass());
-    FPM2.addPass(SimplifyCFGPass());
-    
-    MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM2)));
-  }
+  FunctionPassManager FPM;
+  FPM.addPass(IntegerEqPropagationPass());
+  FPM.addPass(GVN());
+  FPM.addPass(ArithmeticPass());
+  FPM.addPass(GVN());
+  FPM.addPass(SimplifyCFGPass());
+  MPM.addPass(createModuleToFunctionPassAdaptor(move(FPM)));
 
   MPM.run(*M, MAM);
 

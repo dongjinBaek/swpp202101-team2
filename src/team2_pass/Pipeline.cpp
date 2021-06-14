@@ -3,7 +3,7 @@
 using namespace llvm;
 using namespace std;
 
-static FunctionPassManager buildFunctionSimplificationPipeline() {
+FunctionPassManager buildFunctionSimplificationPipeline() {
   FunctionPassManager FPM;
   FPM.addPass(SROA());
   FPM.addPass(EarlyCSEPass(true));
@@ -102,7 +102,29 @@ ModulePassManager buildModuleOptimizationPipeline() {
   OptimizePM.addPass(LoopLoadEliminationPass());
   OptimizePM.addPass(InstCombinePass());
   OptimizePM.addPass(SimplifyCFGPass(SimplifyCFGOptions().needCanonicalLoops(false)));
+  OptimizePM.addPass(LoopUnrollAndJamPass(3));
+  OptimizePM.addPass(LoopUnrollPass(LoopUnrollOptions(3, false, false)
+                      .setPartial(true).setRuntime(true).setUpperBound(true)));
+  OptimizePM.addPass(InstCombinePass());
+  OptimizePM.addPass(RequireAnalysisPass<OptimizationRemarkEmitterAnalysis, Function>());
+  OptimizePM.addPass(createFunctionToLoopPassAdaptor(
+      LICMPass(100, 250), true, true, false));
   MPM.addPass(createModuleToFunctionPassAdaptor(move(OptimizePM)));
+
+  return MPM;
+}
+
+ModulePassManager buildModulePostOptimizationPipeline() {
+  ModulePassManager MPM;
+  FunctionPassManager OptimizePM;
+  OptimizePM.addPass(LoopSinkPass());
+  OptimizePM.addPass(InstSimplifyPass());
+  OptimizePM.addPass(DivRemPairsPass());
+  OptimizePM.addPass(SimplifyCFGPass());
+  MPM.addPass(createModuleToFunctionPassAdaptor(move(OptimizePM)));
+
+  MPM.addPass(GlobalDCEPass());
+  MPM.addPass(ConstantMergePass());
 
   return MPM;
 }
