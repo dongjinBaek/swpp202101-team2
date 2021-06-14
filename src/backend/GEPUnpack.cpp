@@ -148,12 +148,16 @@ PreservedAnalyses GEPUnpackPass::run(Module &M, ModuleAnalysisManager &MAM) {
             pti = BinaryOperator::CreateAdd(pti, cstV);
             pti->insertBefore(&I);
           }
+          map<Type *, Instruction *> TypeMap;
           for (auto &pair : OtherList) {
             Instruction *user = pair.first;
             Instruction *from = pair.second;
-            Instruction *to = CastInst::CreateBitOrPointerCast(pti, from->getType());
-            to->insertBefore(&I);
-            user->replaceUsesOfWith(from, to);
+            if (TypeMap.find(from->getType()) == TypeMap.end()) {
+              Instruction *to = CastInst::CreateBitOrPointerCast(pti, from->getType());
+              TypeMap[from->getType()] = to;
+              to->insertBefore(&I);
+            }
+            user->replaceUsesOfWith(from, TypeMap[from->getType()]);
           }
       }
       EraseList.push_back(&I);
