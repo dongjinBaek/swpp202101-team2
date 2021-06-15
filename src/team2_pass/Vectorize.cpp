@@ -13,16 +13,16 @@ Difference VectorizePass::getDifference(Value *V1, Value *V2) {
   if (V1 == V2)
     return {true, 0};
 
-  // consider zext, sext as same value
-  SExtInst *S1 = dyn_cast<SExtInst>(V1);
-  SExtInst *S2 = dyn_cast<SExtInst>(V2);
-  ZExtInst *Z1 = dyn_cast<ZExtInst>(V1);
-  ZExtInst *Z2 = dyn_cast<ZExtInst>(V2);
-  if (Z1) return getDifference(Z1->getOperand(0), V2);
-  if (S1) return getDifference(S1->getOperand(0), V2);
-  if (Z2) return getDifference(V1, Z2->getOperand(0));
-  if (S2) return getDifference(V1, S2->getOperand(0));
-  
+  // consider zext, sext, inttoptr, bitcast, trunc as same value
+  for (int i = 0, sign = 1; i < 2; i++, sign *= -1) {
+    if (isa<SExtInst>(V1) || isa<ZExtInst>(V1) || isa<IntToPtrInst>(V1) || isa<BitCastInst>(V1) || isa<TruncInst>(V1)) {
+      Instruction *I = dyn_cast<Instruction>(V1);
+      Difference diff = getDifference(I->getOperand(0), V2);
+      return {diff.known, sign * diff.value};
+    }
+    swap (V1, V2);
+  }
+
   // constant
   ConstantInt *C1 = dyn_cast<ConstantInt>(V1);
   ConstantInt *C2 = dyn_cast<ConstantInt>(V2);
@@ -90,8 +90,9 @@ Difference VectorizePass::getDifference(Value *V1, Value *V2) {
   return {false, 0};
 }
 
-void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
-  sinkAllLoadUsers(BB);
+void VectorizePass::runOnBasicBlock(BasicBlock &BB, bool sinkLoadUsers) {
+  if (sinkLoadUsers)
+    sinkAllLoadUsers(BB);
 
   Instruction *BaseI = nullptr;
   Instruction *NextBaseI = findNextBaseInstruction(BB.getFirstNonPHI());
@@ -236,7 +237,10 @@ void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVec
   int offsetRange = Offsets[vectorSize-1] - Offsets[0];
   int targetSize, mask;
   int i_to_idx[8], mask_arr[8] = {1, 1, 1, 1, 1, 1, 1, 1};
-  assert (offsetRange < 8 && "Offsets should fit in 8 bytes to vectorize");
+  if (offsetRange >= 8) {
+    LLVM_DEBUG(dbgs() << "Offsets should fit in 8 bytes to vectorize\n");
+    return;
+  }
   if (offsetRange == 1) targetSize = 2;
   else if (offsetRange < 4) targetSize = 4;
   else targetSize = 8;
@@ -268,6 +272,7 @@ void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVec
         LastInsert = CExtract;
 
         VectInsts[i_to_idx[i]]->replaceAllUsesWith(CExtract);
+        loadVectorized = true;
       }
     }
   }
@@ -418,14 +423,20 @@ bool VectorizePass::doesAccessMemory(CallInst *CI) {
   return !F->doesNotAccessMemory();
 }
 
-PreservedAnalyses VectorizePass::run(Module &M, ModuleAnalysisManager &MAM) {
+void VectorizePass::runOnModule(Module &M, bool sinkLoadUsers) {
   declareFunctions(M);
-
   for (Function &F : M) {
     for (BasicBlock &BB : F) {
-      runOnBasicBlock(BB);
+      runOnBasicBlock(BB, sinkLoadUsers);
     }
   }
+}
+
+PreservedAnalyses VectorizePass::run(Module &M, ModuleAnalysisManager &MAM) {
+  // test for cloned module
+  runOnModule(*CloneModule(M), true);
+  // if load was not vetorized, don't sink
+  runOnModule(M, loadVectorized);
   return PreservedAnalyses::none();
 }
 

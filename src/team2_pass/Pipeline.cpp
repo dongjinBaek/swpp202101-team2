@@ -105,7 +105,6 @@ ModulePassManager buildModuleOptimizationPipeline() {
   OptimizePM.addPass(LoopUnrollAndJamPass(3));
   OptimizePM.addPass(LoopUnrollPass(LoopUnrollOptions(3, false, false)
                       .setPartial(true).setRuntime(true).setUpperBound(true)));
-  OptimizePM.addPass(InstCombinePass());
   OptimizePM.addPass(RequireAnalysisPass<OptimizationRemarkEmitterAnalysis, Function>());
   OptimizePM.addPass(createFunctionToLoopPassAdaptor(
       LICMPass(100, 250), true, true, false));
