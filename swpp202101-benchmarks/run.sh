@@ -18,8 +18,8 @@ for pathname in *; do
             sf-interpreter "../src/$pathname.s" < $inputname > output.txt
             mv "sf-interpreter.log" "$inputname.log"
             mv "sf-interpreter-cost.log" "$inputname-cost.log"
-            num=$(echo $inputname | cut -c6-6)
-            diff output.txt "output$num.txt" >> "$inputname.log"
+            out=$(echo $inputname | cut -c6-)
+            diff output.txt "output$out" >> "$inputname.log"
         done
         rm output.txt
         cd ../../

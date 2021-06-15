@@ -20,8 +20,8 @@ for pathname in *; do
             ../../../bin/sf-interpreter "../src/$pathname.s" < $inputname > output.txt
             mv "sf-interpreter.log" "$inputname.log"
             mv "sf-interpreter-cost.log" "$inputname-cost.log"
-            num=$(echo $inputname | cut -c6-6)
-            diff output.txt "output$num.txt" >> "$inputname.log"
+            out=$(echo $inputname | cut -c6-)
+            diff output.txt "output$out" >> "$inputname.log"
             error=$?
             if [ $error -eq 0 ]
             then
