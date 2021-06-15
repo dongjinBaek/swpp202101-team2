@@ -130,6 +130,7 @@ void VectorizePass::runOnBasicBlock(BasicBlock &BB, bool sinkLoadUsers) {
 
       if (LI || SI) {
         Value *CurPointer = LI ? CurI->getOperand(0) : CurI->getOperand(1);
+        if (CurPointer->getType() != Int64PtrTy) continue;
         Difference diff = getDifference(CurPointer, BasePointer);
         bool offsetExist = find(AOffsets.begin(), AOffsets.end(), diff.value) != AOffsets.end();
         LLVM_DEBUG(dbgs() << "  Inst: " << *CurI << ", known: " << diff.known << ", value: " 
