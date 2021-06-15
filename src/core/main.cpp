@@ -43,21 +43,6 @@ static cl::opt<string> optOutput(
     cl::Positional, cl::desc("output assembly file"), cl::cat(optCategory),
     cl::init("a.s"));
 
-static cl::list<string> optUsePass("p", cl::desc("used passes"), cl::cat(optCategory));
-
-bool shouldUsePass(string arg)
-{
-  if (optUsePass.size() == 0) {
-    return true;
-  }
-  for (unsigned i=0; i < optUsePass.size(); ++i) {
-    if (arg == optUsePass[i]) {
-      return true;
-    }
-  }
-  return false;
-}
-
 int main(int argc, char *argv[]) {
   cl::ParseCommandLineOptions(argc, argv);
   //Parse command line arguments
