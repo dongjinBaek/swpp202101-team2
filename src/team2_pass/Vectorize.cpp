@@ -236,7 +236,10 @@ void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVec
   int offsetRange = Offsets[vectorSize-1] - Offsets[0];
   int targetSize, mask;
   int i_to_idx[8], mask_arr[8] = {1, 1, 1, 1, 1, 1, 1, 1};
-  assert (offsetRange < 8 && "Offsets should fit in 8 bytes to vectorize");
+  if (offsetRange >= 8) {
+    LLVM_DEBUG(dbgs() << "Offsets should fit in 8 bytes to vectorize\n");
+    return;
+  }
   if (offsetRange == 1) targetSize = 2;
   else if (offsetRange < 4) targetSize = 4;
   else targetSize = 8;
