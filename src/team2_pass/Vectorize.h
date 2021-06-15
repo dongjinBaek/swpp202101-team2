@@ -15,6 +15,7 @@
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Transforms/Utils/Cloning.h"
 
 using namespace llvm;
 using namespace std;
@@ -42,10 +43,12 @@ private:
     map<int, FunctionCallee> VLoads;
     map<int, FunctionCallee> VStores;
     map<int, FunctionCallee> ExtractElements;
+    bool loadVectorized = false;
 
     void Vectorize(SmallVector<Instruction *, 8> &, SmallVector<int, 8> &, bool);
     Instruction *findNextBaseInstruction(Instruction *I);
-    void runOnBasicBlock(BasicBlock &BB);
+    void runOnModule(Module &M, bool sinkLoadUsers);
+    void runOnBasicBlock(BasicBlock &BB, bool sinkLoadUsers);
     void declareFunctions(Module &M);
     void sinkAllLoadUsers(BasicBlock &BB);
     void sinkRecursive(BasicBlock &BB, Instruction *I);

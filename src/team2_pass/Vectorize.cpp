@@ -90,8 +90,9 @@ Difference VectorizePass::getDifference(Value *V1, Value *V2) {
   return {false, 0};
 }
 
-void VectorizePass::runOnBasicBlock(BasicBlock &BB) {
-  sinkAllLoadUsers(BB);
+void VectorizePass::runOnBasicBlock(BasicBlock &BB, bool sinkLoadUsers) {
+  if (sinkLoadUsers)
+    sinkAllLoadUsers(BB);
 
   Instruction *BaseI = nullptr;
   Instruction *NextBaseI = findNextBaseInstruction(BB.getFirstNonPHI());
@@ -271,6 +272,7 @@ void VectorizePass::Vectorize(SmallVector<Instruction *, 8> &VectInsts, SmallVec
         LastInsert = CExtract;
 
         VectInsts[i_to_idx[i]]->replaceAllUsesWith(CExtract);
+        loadVectorized = true;
       }
     }
   }
@@ -421,14 +423,20 @@ bool VectorizePass::doesAccessMemory(CallInst *CI) {
   return !F->doesNotAccessMemory();
 }
 
-PreservedAnalyses VectorizePass::run(Module &M, ModuleAnalysisManager &MAM) {
+void VectorizePass::runOnModule(Module &M, bool sinkLoadUsers) {
   declareFunctions(M);
-
   for (Function &F : M) {
     for (BasicBlock &BB : F) {
-      runOnBasicBlock(BB);
+      runOnBasicBlock(BB, sinkLoadUsers);
     }
   }
+}
+
+PreservedAnalyses VectorizePass::run(Module &M, ModuleAnalysisManager &MAM) {
+  // test for cloned module
+  runOnModule(*CloneModule(M), true);
+  // if load was not vetorized, don't sink
+  runOnModule(M, loadVectorized);
   return PreservedAnalyses::none();
 }
 
